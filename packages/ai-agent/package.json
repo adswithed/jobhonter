@@ -1,0 +1,27 @@
+{
+  "name": "@jobhonter/ai-agent",
+  "version": "0.1.0",
+  "description": "AI-powered application generation and personalization (Private SaaS Package)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["jobhonter", "ai", "agent", "private"],
+  "author": "JobHonter Team",
+  "license": "PROPRIETARY",
+  "dependencies": {
+    "@jobhonter/core": "workspace:*",
+    "openai": "^4.0.0",
+    "@anthropic-ai/sdk": "^0.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "@types/node": "^22.0.0"
+  }
+} 

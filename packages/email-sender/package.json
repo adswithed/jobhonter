@@ -1,0 +1,28 @@
+{
+  "name": "@jobhonter/email-sender",
+  "version": "0.1.0",
+  "description": "Multi-provider email sending and tracking for JobHonter",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["jobhonter", "email", "sender", "smtp"],
+  "author": "JobHonter Team",
+  "license": "MIT",
+  "dependencies": {
+    "@jobhonter/core": "workspace:*",
+    "nodemailer": "^6.9.0",
+    "@sendgrid/mail": "^8.1.0",
+    "mailgun.js": "^10.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "@types/node": "^22.0.0",
+    "@types/nodemailer": "^6.4.0"
+  }
+} 

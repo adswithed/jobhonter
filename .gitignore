@@ -1,0 +1,156 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+dist/
+build/
+out/
+.vercel/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Environment variables (CRITICAL - Don't commit secrets!)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+*.env
+
+# Package managers
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# ESLint cache
+.eslintcache
+
+# Stylelint cache
+.stylelintcache
+
+# Testing
+coverage/
+.nyc_output
+*.lcov
+
+# Logs
+logs
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Prisma migrations (keep schema.prisma, ignore generated client)
+# We keep migrations for version control but ignore generated files
+**/prisma/migrations/**/migration.sql
+node_modules/.prisma/
+
+# Docker
+Dockerfile.local
+docker-compose.override.yml
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Private SaaS-only files (CRITICAL - Keep these private!)
+# These files contain proprietary AI and billing logic
+packages/ai-agent/src/**/*
+packages/admin-tools/src/billing/**/*
+packages/admin-tools/src/enterprise/**/*
+
+# Private configuration files
+config/private.json
+config/saas.json
+secrets/
+
+# Deployment keys and certificates
+*.pem
+*.key
+*.crt
+ssl/
+
+# Analytics and tracking codes
+analytics.config.js
+tracking.config.js
+
+# Customer data and backups
+backups/
+exports/
+customer-data/
+
+# License keys and tokens
+license.key
+*.license
+tokens.json
+
+# Local development overrides
+docker-compose.local.yml
+.env.override
+
+# Generated documentation
+docs/generated/
+api-docs.json
+
+# Monitoring and profiling
+*.prof
+newrelic_agent.log
+
+# MacOS
+.AppleDouble
+.LSOverride
+
+# Windows
+desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# JetBrains IDEs
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Temporary folders
+tmp/
+temp/ 

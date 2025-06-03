@@ -1,0 +1,24 @@
+{
+  "name": "@jobhonter/admin-tools",
+  "version": "0.1.0",
+  "description": "Administrative tools and analytics for JobHonter",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["jobhonter", "admin", "analytics", "tools"],
+  "author": "JobHonter Team",
+  "license": "MIT",
+  "dependencies": {
+    "@jobhonter/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "@types/node": "^22.0.0"
+  }
+} 

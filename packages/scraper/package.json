@@ -1,0 +1,27 @@
+{
+  "name": "@jobhonter/scraper",
+  "version": "0.1.0",
+  "description": "Multi-platform job scraping engine for JobHonter",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["jobhonter", "scraper", "jobs", "automation"],
+  "author": "JobHonter Team",
+  "license": "MIT",
+  "dependencies": {
+    "@jobhonter/core": "workspace:*",
+    "axios": "^1.9.0",
+    "cheerio": "^1.0.0",
+    "puppeteer": "^23.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "@types/node": "^22.0.0"
+  }
+} 

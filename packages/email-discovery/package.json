@@ -1,0 +1,27 @@
+{
+  "name": "@jobhonter/email-discovery",
+  "version": "0.1.0",
+  "description": "Email discovery and contact extraction for JobHonter",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["jobhonter", "email", "discovery", "contacts"],
+  "author": "JobHonter Team",
+  "license": "MIT",
+  "dependencies": {
+    "@jobhonter/core": "workspace:*",
+    "axios": "^1.9.0",
+    "cheerio": "^1.0.0",
+    "email-validator": "^2.0.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "@types/node": "^22.0.0"
+  }
+} 

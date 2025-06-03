@@ -1,0 +1,23 @@
+{
+  "name": "@jobhonter/core",
+  "version": "0.1.0",
+  "description": "Core shared types, utilities, and constants for JobHonter",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["jobhonter", "core", "types", "utilities"],
+  "author": "JobHonter Team",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+} 

@@ -1,0 +1,247 @@
+﻿Begin Development of JobHonter (Open Source + SaaS Platform)
+You are now taking over the complete development of JobHonter, a dual-structured AI-powered job application automation system, with the following goals:
+________________
+
+
+Project Overview
+JobHonter is an ai agent platform designed to automate job applications (automated outbound job application engine) by advanced query searching non-traditional job sources (like social media platforms like Twitter, Reddit, LinkedIn, facebook and search engines like Google, bing, yahoo, yandex), extracting contact emails from job hiring related posts, blogs, websites etc, and sending personalized emails via AI-generated content — effectively bypassing traditional job boards. For example the platform do an advance query search based on the user provided role on twitter or google, filter the keywords to match the job title a user is looking for, find the email on the post, blog or website and if a post do not have an email but have a link to apply, the ai agent should smartly follow the link, find the company website, get the mail to submit an application then the ai agent smartly tailor the users resume for the job application and send a tailored email to the recruiters, everything is done automatically for the user. Every application will go directly via email — no job boards, no forms, just direct access to hiring managers.
+
+The agent will act like a personal assistant who:
+* Finds the freshest leads
+
+* Digs through posts and websites
+
+* Builds the right message
+
+* Sends it immediately
+
+* Logs everything
+
+This saves job seekers time, effort, and frustration.
+
+
+It has two branches:
+   1. Open Source Version – Self-hosted by developers
+
+   2. SaaS Version – Hosted and monetized version with additional private features
+
+As an expert saas and open source  platform developer, Properly separate the functionalities 
+
+________________
+
+
+Core Objectives
+      1. Build an AI job application system that automates:
+
+         * Job discovery from public platforms
+
+         * Email discovery and verification
+
+         * Personalized email generation
+
+         * Email dispatching and status tracking
+
+            2. Maintain clear separation between:
+
+               * Open source modules (scraper, email discovery, frontend, etc.)
+
+               * SaaS/private modules (AI agents, billing, analytics, etc.)
+
+                  3. Build securely, following best industry practices for privacy, security, and scalability.
+
+                  4. At every development step, review and refactor to ensure:
+
+                     * The most secure and efficient code is used
+
+                     * Code quality, modularity, and clarity are maintained
+
+                     * No shortcuts or technical debt are introduced
+
+________________
+
+
+Monorepo Folder Structure
+This is the current folder structure:
+
+
+jobhonter/
+├── apps/
+│   ├── frontend/               # Public UI for open source users
+│   ├── backend/                # API, auth, DB, REST/GraphQL
+                  
+├── packages/
+│   ├── core/                   # Shared constants, types, and utils
+│   ├── scraper/                # Job platform scrapers (modular)
+│   ├── email-discovery/        # Extract emails from job posts
+│   ├── email-sender/           # Send emails (SMTP/Mailgun/SendGrid/etc.)
+│   ├── ai-agent/               # SaaS-only closed-source smart AI logic
+│   └── admin-tools/            # Admin-only analytics and controls
+├── .github/                    # GitHub workflows, templates, docs
+├── pnpm-workspace.yaml
+└── README.md
+
+
+Note:
+                        * ai-agent/ is private and should not be pushed to public GitHub.
+
+                        * SaaS-specific logic should be developed privately but cleanly integrated.
+
+________________
+
+
+Security Mandates
+You must implement with zero-trust principles, OWASP Top 10 guidelines, and:
+                           * Secure authentication (JWT, OAuth, hashed passwords, refresh tokens)
+
+                           * Rate limiting and IP throttling
+
+                           * Input validation and sanitization
+
+                           * Secure API design (no sensitive data leaks)
+
+                           * Store credentials/API keys in .env, never hardcoded
+
+                           * Leverage parameterized queries / ORM to prevent SQL injection
+
+                           * Use helmet, CSRF protection, and CORS best practices
+
+                           * Enable logging and monitor for suspicious activity
+
+________________
+
+
+Development Expectations
+At every step:
+                              * Review all generated code
+
+                              * Ask: “Is this the most efficient, secure, scalable approach?”
+
+                              * Refactor aggressively to use the best design patterns and abstractions
+
+                              * Adhere to DRY, SOLID, and KISS principles
+
+                              * Follow clean code and naming conventions
+
+________________
+
+
+Functionality by Folder
+apps/frontend/ (Open Source)
+                                 * Landing page
+
+                                 * Scraped job list UI
+
+                                 * Email preview and log UI
+
+                                 * Light dashboard for users
+
+apps/backend/ (Open Source)
+                                    * REST or GraphQL API
+
+                                    * Scraper orchestration endpoints
+
+                                    * Email sending routes
+
+                                    * Basic JWT Auth
+
+                                    * Database integrations (PostgreSQL preferred)
+
+apps/saas/ (Private)
+                                       * Stripe billing integration
+
+                                       * OAuth (Google/GitHub)
+
+                                       * Plan restrictions (free/paid tiers)
+
+                                       * Onboarding and usage analytics
+
+                                       * User-specific job/app stats
+
+packages/scraper/ (Open Source)
+                                          * Scrapers for:
+
+                                             * Twitter
+
+                                             * Reddit
+
+                                             * Google Jobs
+
+                                             * LinkedIn
+
+                                                * Pluggable architecture
+
+                                                * Filters for recency, keywords, location
+
+packages/email-discovery/ (Open Source)
+                                                   * Email extraction via regex, pattern matching
+
+                                                   * Fallback discovery from job descriptions
+
+
+packages/email-sender/ (Open Source)
+                                                      * Abstract SMTP + Mailgun + Resend + SendGrid
+
+                                                      * Track success/failure
+
+                                                      * Use proper async sending queues
+
+                                                      * Custom email templates
+
+packages/ai-agent/ (Private)
+                                                         * Smart AI-based cover letter/resume generation
+
+                                                         * Persona matching (adjust tone per company)
+
+                                                         * Job role classification + customization
+
+                                                         * Scheduling & retry logic
+
+                                                         * GPT-4.5 or Claude prompt tuning
+
+                                                         * Agent memory per user
+
+packages/core/ (Open Source)
+                                                            * Typescript types
+
+                                                            * App constants
+
+                                                            * Shared date utilities, validators, etc.
+
+packages/admin-tools/ (Open Source or Private)
+                                                               * Job scrape history viewer
+
+                                                               * Email logs
+
+                                                               * Platform-wide stats
+
+                                                               * User management (if SaaS)
+
+________________
+
+
+CI/CD & Testing
+                                                                  * Setup GitHub Actions for linting, testing, formatting
+
+                                                                  * Add integration/unit tests for critical modules
+
+                                                                  * Use ESLint, Prettier, Husky (optional)
+
+________________
+
+
+Cursor: Your Role Going Forward
+You are now in charge of:
+                                                                     * Planning and building each module securely
+
+                                                                     * Writing robust, testable, scalable code
+
+                                                                     * Reviewing all generated output
+
+                                                                     * Maintaining clear separation of open-source and private logic
+
+                                                                     * Optimizing every step of the development lifecycle
+
+                                                                     * Keeping the monorepo clean and modular
+                                                                     * Brainstorming to even add features/functions not mention
+
+You must not proceed unless your solution is the most secure and effective option available.
