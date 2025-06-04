@@ -1,200 +1,217 @@
-// Feature Flag System
-// Controls which features are available in open source vs SaaS versions
+/**
+ * Feature Flag System for Open Source vs SaaS Edition
+ * 
+ * This system allows the same codebase to support both:
+ * - Open Source: Self-hosted with core features
+ * - SaaS: Hosted with premium features and billing
+ */
 
-export interface FeatureFlags {
-  // Core Features (Always Available)
-  jobDiscovery: boolean;
-  emailExtraction: boolean;
-  emailSending: boolean;
-  basicAnalytics: boolean;
-  userAuth: boolean;
+export interface FeatureConfig {
+  // Core Features (Available in both editions)
+  jobScraping: boolean
+  emailDiscovery: boolean
+  basicEmailSending: boolean
+  jobTracking: boolean
+  simpleAnalytics: boolean
   
-  // SaaS Premium Features
-  aiGeneration: boolean;
-  advancedAnalytics: boolean;
-  teamCollaboration: boolean;
-  prioritySupport: boolean;
-  customIntegrations: boolean;
-  whiteLabel: boolean;
+  // Premium Features (SaaS only)
+  aiPersonalization: boolean
+  advancedAnalytics: boolean
+  premiumSupport: boolean
+  bulkOperations: boolean
+  customIntegrations: boolean
+  teamCollaboration: boolean
+  whiteLabeling: boolean
   
-  // Scraper Sources
-  twitterScraping: boolean;
-  redditScraping: boolean;
-  linkedinScraping: boolean;
-  googleJobsScraping: boolean;
+  // Billing & Subscription (SaaS only)
+  billing: boolean
+  subscriptionManagement: boolean
+  usageLimits: boolean
   
-  // Email Providers
-  smtpEmail: boolean;
-  sendgridEmail: boolean;
-  mailgunEmail: boolean;
-  resendEmail: boolean;
+  // Enterprise Features (SaaS only)
+  ssoAuthentication: boolean
+  auditLogs: boolean
+  complianceReporting: boolean
+  dedicatedSupport: boolean
 }
 
-export type Edition = 'open-source' | 'saas-pro' | 'saas-enterprise';
+export const OPEN_SOURCE_FEATURES: FeatureConfig = {
+  // Core Features
+  jobScraping: true,
+  emailDiscovery: true,
+  basicEmailSending: true,
+  jobTracking: true,
+  simpleAnalytics: true,
+  
+  // Premium Features (disabled)
+  aiPersonalization: false,
+  advancedAnalytics: false,
+  premiumSupport: false,
+  bulkOperations: false,
+  customIntegrations: false,
+  teamCollaboration: false,
+  whiteLabeling: false,
+  
+  // Billing & Subscription (disabled)
+  billing: false,
+  subscriptionManagement: false,
+  usageLimits: false,
+  
+  // Enterprise Features (disabled)
+  ssoAuthentication: false,
+  auditLogs: false,
+  complianceReporting: false,
+  dedicatedSupport: false,
+}
 
-// Feature configurations for different editions
-export const FEATURE_CONFIGS: Record<Edition, FeatureFlags> = {
-  'open-source': {
-    // Core Features - Available
-    jobDiscovery: true,
-    emailExtraction: true,
-    emailSending: true,
-    basicAnalytics: true,
-    userAuth: true,
-    
-    // SaaS Features - Disabled
-    aiGeneration: false,
-    advancedAnalytics: false,
-    teamCollaboration: false,
-    prioritySupport: false,
-    customIntegrations: false,
-    whiteLabel: false,
-    
-    // Scraper Sources - Basic set
-    twitterScraping: true,
-    redditScraping: true,
-    linkedinScraping: false, // Premium feature
-    googleJobsScraping: true,
-    
-    // Email Providers - Basic set
-    smtpEmail: true,
-    sendgridEmail: true,
-    mailgunEmail: false, // Premium
-    resendEmail: false,  // Premium
-  },
+export const SAAS_FEATURES: FeatureConfig = {
+  // Core Features
+  jobScraping: true,
+  emailDiscovery: true,
+  basicEmailSending: true,
+  jobTracking: true,
+  simpleAnalytics: true,
   
-  'saas-pro': {
-    // All core features
-    jobDiscovery: true,
-    emailExtraction: true,
-    emailSending: true,
-    basicAnalytics: true,
-    userAuth: true,
-    
-    // Most SaaS features
-    aiGeneration: true,
-    advancedAnalytics: true,
-    teamCollaboration: true,
-    prioritySupport: true,
-    customIntegrations: false, // Enterprise only
-    whiteLabel: false,         // Enterprise only
-    
-    // All scraper sources
-    twitterScraping: true,
-    redditScraping: true,
-    linkedinScraping: true,
-    googleJobsScraping: true,
-    
-    // All email providers
-    smtpEmail: true,
-    sendgridEmail: true,
-    mailgunEmail: true,
-    resendEmail: true,
-  },
+  // Premium Features (enabled)
+  aiPersonalization: true,
+  advancedAnalytics: true,
+  premiumSupport: true,
+  bulkOperations: true,
+  customIntegrations: true,
+  teamCollaboration: true,
+  whiteLabeling: true,
   
-  'saas-enterprise': {
-    // Everything enabled
-    jobDiscovery: true,
-    emailExtraction: true,
-    emailSending: true,
-    basicAnalytics: true,
-    userAuth: true,
-    aiGeneration: true,
-    advancedAnalytics: true,
-    teamCollaboration: true,
-    prioritySupport: true,
-    customIntegrations: true,
-    whiteLabel: true,
-    twitterScraping: true,
-    redditScraping: true,
-    linkedinScraping: true,
-    googleJobsScraping: true,
-    smtpEmail: true,
-    sendgridEmail: true,
-    mailgunEmail: true,
-    resendEmail: true,
-  },
-};
+  // Billing & Subscription (enabled)
+  billing: true,
+  subscriptionManagement: true,
+  usageLimits: true,
+  
+  // Enterprise Features (enabled)
+  ssoAuthentication: true,
+  auditLogs: true,
+  complianceReporting: true,
+  dedicatedSupport: true,
+}
 
-// Environment-based feature detection
-export function detectEdition(): Edition {
-  // Check environment variables
-  const saasMode = process.env.SAAS_MODE;
-  const edition = process.env.JOBHONTER_EDITION as Edition;
-  
-  // If explicitly set, use that
-  if (edition && FEATURE_CONFIGS[edition]) {
-    return edition;
+/**
+ * Feature Limits for Different Editions
+ */
+export interface FeatureLimits {
+  maxJobsPerDay: number
+  maxApplicationsPerDay: number
+  maxEmailTemplates: number
+  maxJobSources: number
+  maxUsers: number
+  apiRateLimit: number
+}
+
+export const OPEN_SOURCE_LIMITS: FeatureLimits = {
+  maxJobsPerDay: 100,
+  maxApplicationsPerDay: 50,
+  maxEmailTemplates: 5,
+  maxJobSources: 3,
+  maxUsers: 1,
+  apiRateLimit: 1000, // requests per hour
+}
+
+export const SAAS_LIMITS: FeatureLimits = {
+  maxJobsPerDay: 1000,
+  maxApplicationsPerDay: 500,
+  maxEmailTemplates: 50,
+  maxJobSources: 10,
+  maxUsers: 10,
+  apiRateLimit: 10000, // requests per hour
+}
+
+/**
+ * Determine Edition Type
+ */
+export type EditionType = 'opensource' | 'saas'
+
+export function getEditionType(): EditionType {
+  // Check for Node.js environment
+  if (typeof globalThis !== 'undefined' && (globalThis as any).process?.env) {
+    const env = (globalThis as any).process.env
+    const edition = env.EDITION_TYPE || env.NEXT_PUBLIC_EDITION_TYPE
+    return edition === 'saas' ? 'saas' : 'opensource'
   }
   
-  // Auto-detect based on environment
-  if (saasMode === 'true' || saasMode === '1') {
-    return 'saas-pro';
+  // Browser environment - check for build-time configuration
+  if (typeof window !== 'undefined') {
+    // @ts-ignore - This will be replaced at build time
+    return (globalThis as any).__EDITION_TYPE__ || 'opensource'
   }
   
-  // Check if AI package is available (indicates SaaS setup)
-  try {
-    require('@jobhonter/ai-agent');
-    return 'saas-pro';
-  } catch (error) {
-    // AI package not available, running open source
-    return 'open-source';
-  }
+  return 'opensource'
 }
 
-// Get current feature flags
-export function getFeatureFlags(): FeatureFlags {
-  const edition = detectEdition();
-  return FEATURE_CONFIGS[edition];
+/**
+ * Get Current Feature Configuration
+ */
+export function getFeatures(): FeatureConfig {
+  const edition = getEditionType()
+  return edition === 'saas' ? SAAS_FEATURES : OPEN_SOURCE_FEATURES
 }
 
-// Check if a specific feature is enabled
-export function isFeatureEnabled(feature: keyof FeatureFlags): boolean {
-  const flags = getFeatureFlags();
-  return flags[feature];
+/**
+ * Get Current Feature Limits
+ */
+export function getLimits(): FeatureLimits {
+  const edition = getEditionType()
+  return edition === 'saas' ? SAAS_LIMITS : OPEN_SOURCE_LIMITS
 }
 
-// Get current edition info
-export function getEditionInfo() {
-  const edition = detectEdition();
-  const flags = getFeatureFlags();
+/**
+ * Check if a specific feature is enabled
+ */
+export function isFeatureEnabled(feature: keyof FeatureConfig): boolean {
+  const features = getFeatures()
+  return features[feature]
+}
+
+/**
+ * Check if user has reached a limit
+ */
+export function hasReachedLimit(
+  limitType: keyof FeatureLimits,
+  currentValue: number
+): boolean {
+  const limits = getLimits()
+  return currentValue >= limits[limitType]
+}
+
+/**
+ * Get remaining quota for a limit
+ */
+export function getRemainingQuota(
+  limitType: keyof FeatureLimits,
+  currentValue: number
+): number {
+  const limits = getLimits()
+  return Math.max(0, limits[limitType] - currentValue)
+}
+
+/**
+ * Feature Guard Hook for React Components
+ */
+export function useFeatureGuard(feature: keyof FeatureConfig) {
+  const isEnabled = isFeatureEnabled(feature)
+  const edition = getEditionType()
   
   return {
+    isEnabled,
     edition,
-    isOpenSource: edition === 'open-source',
-    isSaaS: edition.startsWith('saas'),
-    isPro: edition === 'saas-pro',
-    isEnterprise: edition === 'saas-enterprise',
-    features: flags,
-  };
+    requiresUpgrade: !isEnabled && edition === 'opensource',
+  }
 }
 
-// Feature limits for different editions
-export const FEATURE_LIMITS = {
-  'open-source': {
-    maxApplicationsPerDay: 50,
-    maxJobSources: 3,
-    maxEmailTemplates: 5,
-    maxUsers: 1,
-    retentionDays: 30,
-  },
-  'saas-pro': {
-    maxApplicationsPerDay: 500,
-    maxJobSources: 10,
-    maxEmailTemplates: 50,
-    maxUsers: 10,
-    retentionDays: 365,
-  },
-  'saas-enterprise': {
-    maxApplicationsPerDay: -1, // Unlimited
-    maxJobSources: -1,
-    maxEmailTemplates: -1,
-    maxUsers: -1,
-    retentionDays: -1,
-  },
-};
+/**
+ * Conditional Feature Rendering
+ */
+export interface FeatureGateProps {
+  feature: keyof FeatureConfig
+  children: any // Using any instead of React.ReactNode to avoid React dependency
+  fallback?: any
+}
 
-export function getFeatureLimits() {
-  const edition = detectEdition();
-  return FEATURE_LIMITS[edition];
-} 
+// Note: This would be implemented as a React component in the frontend package 
