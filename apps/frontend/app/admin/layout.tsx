@@ -2,9 +2,9 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { siteConfig } from "@/lib/constants"
 import { ModeToggle } from "@/components/mode-toggle"
 import { Button } from "@/components/ui/button"
@@ -19,10 +19,21 @@ import {
   Settings,
   ShieldCheck,
   Users,
+  LogOut,
+  Shield,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { useAuth } from "@/lib/auth-context"
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu"
 
 interface SidebarNavProps extends React.HTMLAttributes<HTMLElement> {
   items: {
@@ -56,6 +67,50 @@ export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const { user, isLoading, isAuthenticated, isAdmin, logout } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  // Don't apply auth checks to the admin login page itself
+  const isLoginPage = pathname === '/admin/login'
+
+  // Redirect if not authenticated or not admin (but skip for login page)
+  useEffect(() => {
+    if (!isLoading && !isLoginPage) {
+      if (!isAuthenticated) {
+        router.push('/admin/login')
+      } else if (!isAdmin) {
+        router.push('/dashboard') // Redirect regular users to dashboard
+      }
+    }
+  }, [isLoading, isAuthenticated, isAdmin, router, isLoginPage])
+
+  const handleLogout = async () => {
+    await logout()
+    router.push('/admin/login')
+  }
+
+  // If this is the login page, render it without the admin layout
+  if (isLoginPage) {
+    return <>{children}</>
+  }
+
+  // Show loading while checking authentication (for non-login pages)
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="h-12 w-12 text-primary mx-auto mb-4 animate-pulse" />
+          <p className="text-muted-foreground">Verifying admin credentials...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render admin content if not authenticated or not admin (for non-login pages)
+  if (!isAuthenticated || !isAdmin) {
+    return null
+  }
 
   const adminNavItems = [
     {
@@ -115,6 +170,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <SheetContent side="left" className="w-72">
                 <div className="flex items-center gap-2 pb-4 pt-2">
                   <Link href="/" className="flex items-center gap-2">
+                    <Shield className="h-6 w-6 text-primary" />
                     <span className="text-xl font-bold">{siteConfig.name} Admin</span>
                   </Link>
                 </div>
@@ -122,6 +178,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </SheetContent>
             </Sheet>
             <Link href="/admin" className="flex items-center gap-2">
+              <Shield className="h-6 w-6 text-primary" />
               <span className="text-xl font-bold hidden md:inline-block">{siteConfig.name} Admin</span>
             </Link>
           </div>
@@ -131,10 +188,36 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <span className="sr-only">Notifications</span>
             </Button>
             <ModeToggle />
-            <Avatar>
-              <AvatarImage src="/images/avatars/sarah.png" alt="Admin" />
-              <AvatarFallback>AD</AvatarFallback>
-            </Avatar>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src="/images/avatars/admin.png" alt={user?.name || "Admin"} />
+                    <AvatarFallback>
+                      {user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'AD'}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user?.name}</p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {user?.email}
+                    </p>
+                    <p className="text-xs leading-none text-primary font-medium">
+                      🛡️ Admin Access
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>

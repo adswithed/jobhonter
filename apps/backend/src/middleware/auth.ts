@@ -3,8 +3,10 @@ import jwt from 'jsonwebtoken';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
+    id: string;
     userId: string;
     email: string;
+    role: string;
   };
 }
 
@@ -22,8 +24,10 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key') as any;
     req.user = {
+      id: decoded.userId,
       userId: decoded.userId,
       email: decoded.email,
+      role: decoded.role || 'USER',
     };
     next();
   } catch (error) {
@@ -34,6 +38,9 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
   }
 };
 
+// Main auth function (alias for authenticateToken)
+export const auth = authenticateToken;
+
 // Optional authentication - doesn't fail if no token
 export const optionalAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -43,8 +50,10 @@ export const optionalAuth = (req: AuthenticatedRequest, res: Response, next: Nex
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key') as any;
       req.user = {
+        id: decoded.userId,
         userId: decoded.userId,
         email: decoded.email,
+        role: decoded.role || 'USER',
       };
     } catch (error) {
       // Token is invalid, but we don't fail the request
@@ -53,4 +62,7 @@ export const optionalAuth = (req: AuthenticatedRequest, res: Response, next: Nex
   }
 
   next();
-}; 
+};
+
+// Export the request type for external use
+export type { AuthenticatedRequest as Request }; 

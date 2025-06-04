@@ -7,25 +7,23 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Zap, AlertCircle } from "lucide-react"
+import { Zap, AlertCircle, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { siteConfig } from "@/lib/constants"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 
 export default function SignupPage() {
   const router = useRouter()
-  const { register } = useAuth()
-  const searchParams = useSearchParams()
-  const plan = searchParams.get("plan") || "basic"
-
+  const { register, successMessage, clearSuccessMessage } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [formData, setFormData] = useState({
-    fullName: "",
+    name: "",
     email: "",
     password: "",
-    agreeTerms: false,
+    confirmPassword: "",
+    agreeToTerms: false,
   })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,12 +34,13 @@ export default function SignupPage() {
     }))
     // Clear error when user starts typing
     if (error) setError("")
+    if (successMessage) clearSuccessMessage()
   }
 
   const handleCheckboxChange = (checked: boolean) => {
     setFormData((prev) => ({
       ...prev,
-      agreeTerms: checked,
+      agreeToTerms: checked,
     }))
   }
 
@@ -50,20 +49,28 @@ export default function SignupPage() {
     setIsLoading(true)
     setError("")
 
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      setError("🔐 Passwords don't match! Even our AI agents need consistency!")
+      setIsLoading(false)
+      return
+    }
+
+    // Validate terms agreement
+    if (!formData.agreeToTerms) {
+      setError("📋 You'll need to agree to our hunting terms before joining the crew!")
+      setIsLoading(false)
+      return
+    }
+
     try {
       // Use auth context register method
-      await register(formData.fullName, formData.email, formData.password)
-
-      // Set cookie for auto-login
-      const token = localStorage.getItem('token')
-      if (token) {
-        document.cookie = `token=${token}; max-age=${30 * 24 * 60 * 60}; path=/` // 30 days
-      }
+      await register(formData.name, formData.email, formData.password)
 
       // Redirect to dashboard
       router.push("/dashboard")
     } catch (err: any) {
-      setError(err.message || "Account creation failed. Please try again.")
+      setError(err.message || "Registration failed. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -77,13 +84,18 @@ export default function SignupPage() {
             <Zap className="h-6 w-6 text-primary" />
             <span className="text-2xl font-bold">{siteConfig.name}</span>
           </Link>
-          <h1 className="text-3xl font-bold">Create your account</h1>
-          <p className="text-muted-foreground mt-2">
-            {plan === "pro" ? "Sign up for the Pro plan" : "Get started with your free account"}
-          </p>
+          <h1 className="text-3xl font-bold">Join the hunting party!</h1>
+          <p className="text-muted-foreground mt-2">Create your account and start your automated job hunting adventure</p>
         </div>
 
         <div className="bg-card border rounded-lg p-8 shadow-sm">
+          {successMessage && (
+            <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+              <CheckCircle className="h-4 w-4" />
+              {successMessage}
+            </div>
+          )}
+          
           {error && (
             <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md flex items-center gap-2 text-sm text-destructive">
               <AlertCircle className="h-4 w-4" />
@@ -93,14 +105,14 @@ export default function SignupPage() {
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="fullName">Full Name</Label>
+              <Label htmlFor="name">Full Name</Label>
               <Input
-                id="fullName"
-                name="fullName"
+                id="name"
+                name="name"
                 type="text"
-                placeholder="John Doe"
+                placeholder="Your hunting alias"
                 required
-                value={formData.fullName}
+                value={formData.name}
                 onChange={handleChange}
               />
             </div>
@@ -111,7 +123,7 @@ export default function SignupPage() {
                 id="email"
                 name="email"
                 type="email"
-                placeholder="name@example.com"
+                placeholder="hunter@example.com"
                 required
                 value={formData.email}
                 onChange={handleChange}
@@ -124,38 +136,51 @@ export default function SignupPage() {
                 id="password"
                 name="password"
                 type="password"
+                placeholder="Your secret hunting code"
                 required
                 value={formData.password}
                 onChange={handleChange}
               />
-              <p className="text-xs text-muted-foreground">Must be at least 8 characters long</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                placeholder="Confirm your hunting code"
+                required
+                value={formData.confirmPassword}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="flex items-center space-x-2">
-              <Checkbox id="terms" checked={formData.agreeTerms} onCheckedChange={handleCheckboxChange} required />
+              <Checkbox id="terms" checked={formData.agreeToTerms} onCheckedChange={handleCheckboxChange} />
               <Label htmlFor="terms" className="text-sm font-normal">
                 I agree to the{" "}
                 <Link href="/terms" className="text-primary hover:underline">
-                  Terms of Service
+                  hunting terms
                 </Link>{" "}
                 and{" "}
                 <Link href="/privacy" className="text-primary hover:underline">
-                  Privacy Policy
+                  privacy policy
                 </Link>
               </Label>
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading || !formData.agreeTerms}>
-              {isLoading ? "Creating account..." : "Create account"}
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Preparing your hunting gear..." : "Join the crew"}
             </Button>
           </form>
         </div>
 
         <div className="text-center mt-6">
           <p className="text-sm text-muted-foreground">
-            Already have an account?{" "}
+            Already part of the crew?{" "}
             <Link href="/login" className="text-primary hover:underline">
-              Sign in
+              Resume your hunt
             </Link>
           </p>
         </div>

@@ -1,13 +1,24 @@
 import axios from 'axios';
 
 const ERROR_MESSAGES = {
-  NETWORK: "🌐 Oops! Looks like we're having trouble connecting. Please check your internet connection.",
-  DUPLICATE_EMAIL: "📧 This email is already in use. Try logging in instead!",
-  INVALID_CREDENTIALS: "🔑 Oops! Those credentials don't match our records. Double-check and try again!",
-  VALIDATION: "📝 Please fill in all required fields correctly.",
-  SERVER: "😅 Our servers are having a moment. Please try again in a few minutes!",
-  UNAUTHORIZED: "🔒 Please log in to continue.",
-  DEFAULT: "🤔 Something went wrong. Please try again!"
+  NETWORK: "🌐 Looks like our job hunters got lost in cyberspace! Check your internet and let's get back to the hunt.",
+  DUPLICATE_EMAIL: "📧 That email is already on our recruitment list! Time to dust off your login credentials instead.",
+  INVALID_CREDENTIALS: "🔍 Hmm, those credentials didn't match our database. Even our AI agents couldn't find a match! Double-check and try again.",
+  VALIDATION: "📋 Whoops! Some fields are playing hard to get. Fill them all out and let's make this application complete!",
+  SERVER: "⚙️ Our job-hunting servers are taking a coffee break! Give us a moment to get them back on the grind.",
+  UNAUTHORIZED: "🚫 You'll need to punch in your credentials first. No freeloading in the job hunt!",
+  FORBIDDEN: "🔒 This area is for the hiring managers only! Stick to your designated hunting grounds.",
+  DEFAULT: "🤔 Something unexpected happened in the job hunt. But hey, persistence pays off - try again!"
+};
+
+const SUCCESS_MESSAGES = {
+  LOGIN: "🎯 Welcome back, job hunter! Time to resume the mission!",
+  REGISTER: "🎉 Account created! Welcome to the most efficient job hunting crew in town!",
+  LOGOUT: "👋 Logged out successfully. May your next login bring even better opportunities!",
+  PROFILE_UPDATED: "✅ Profile updated! You're looking more hireable already!",
+  APPLICATION_SENT: "🚀 Application fired off! Another shot at your dream job!",
+  JOB_SAVED: "📌 Job saved to your hunting list! Time to prepare for the attack!",
+  EMAIL_SENT: "📬 Email deployed! Your personal job-hunting missile is en route!"
 };
 
 const api = axios.create({
@@ -51,6 +62,8 @@ api.interceptors.response.use(
         localStorage.removeItem('token');
         document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
         throw new Error(ERROR_MESSAGES.UNAUTHORIZED);
+      case 403:
+        throw new Error(ERROR_MESSAGES.FORBIDDEN);
       case 400:
         throw new Error(message || ERROR_MESSAGES.VALIDATION);
       case 500:
@@ -74,22 +87,36 @@ export interface RegisterData {
 
 export interface User {
   id: string;
-  name: string;
   email: string;
+  name: string;
+  role: string;
+  createdAt: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+  message?: string;
 }
 
 export const authApi = {
-  register: async (data: { email: string; password: string; name: string }) => {
+  register: async (data: RegisterData): Promise<AuthResponse> => {
     const response = await api.post('/auth/register', data);
-    return response.data;
+    return {
+      ...response.data.data,
+      message: SUCCESS_MESSAGES.REGISTER
+    };
   },
 
-  login: async (data: { email: string; password: string }) => {
+  login: async (data: LoginCredentials): Promise<AuthResponse> => {
     const response = await api.post('/auth/login', data);
-    return response.data;
+    return {
+      ...response.data.data,
+      message: SUCCESS_MESSAGES.LOGIN
+    };
   },
 
-  logout: async () => {
+  logout: async (): Promise<{ message: string }> => {
     try {
       await api.post('/auth/logout');
     } finally {
@@ -97,14 +124,30 @@ export const authApi = {
       localStorage.removeItem('token');
       document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     }
+    return { message: SUCCESS_MESSAGES.LOGOUT };
   },
 
-  getProfile: async () => {
+  getProfile: async (): Promise<{ user: User }> => {
     const response = await api.get('/auth/profile');
-    return response.data;
+    return response.data.data;
+  },
+
+  // Admin-specific auth methods
+  adminLogin: async (data: LoginCredentials): Promise<AuthResponse> => {
+    const response = await api.post('/auth/admin/login', data);
+    return {
+      ...response.data.data,
+      message: "🛡️ Admin access granted! Welcome to the command center, chief!"
+    };
+  },
+
+  checkAdminAccess: async (): Promise<{ user: User }> => {
+    const response = await api.get('/auth/admin/profile');
+    return response.data.data;
   },
 };
 
+// Jobs API
 export const jobsApi = {
   getJobs: async () => {
     const response = await api.get('/jobs');
@@ -132,6 +175,7 @@ export const jobsApi = {
   },
 };
 
+// Applications API
 export const applicationsApi = {
   getAll: async () => {
     const response = await api.get('/applications');
@@ -143,20 +187,82 @@ export const applicationsApi = {
     return response.data;
   },
 
-  create: async (data: any) => {
+  createApplication: async (data: any) => {
     const response = await api.post('/applications', data);
+    return {
+      ...response.data,
+      message: SUCCESS_MESSAGES.APPLICATION_SENT
+    };
+  },
+
+  updateApplication: async (id: string, data: any) => {
+    const response = await api.put(`/applications/${id}`, data);
     return response.data;
   },
 
-  update: async (id: string, data: any) => {
-    const response = await api.patch(`/applications/${id}`, data);
-    return response.data;
-  },
-
-  delete: async (id: string) => {
+  deleteApplication: async (id: string) => {
     const response = await api.delete(`/applications/${id}`);
     return response.data;
   },
 };
+
+// Admin APIs
+export const adminApi = {
+  // User management
+  getUsers: async () => {
+    const response = await api.get('/admin/users');
+    return response.data;
+  },
+
+  updateUser: async (id: string, data: any) => {
+    const response = await api.put(`/admin/users/${id}`, data);
+    return response.data;
+  },
+
+  deleteUser: async (id: string) => {
+    const response = await api.delete(`/admin/users/${id}`);
+    return response.data;
+  },
+
+  // System settings
+  getSettings: async () => {
+    const response = await api.get('/admin/settings');
+    return response.data;
+  },
+
+  updateSettings: async (data: any) => {
+    const response = await api.put('/admin/settings', data);
+    return response.data;
+  },
+
+  // Analytics
+  getAnalytics: async () => {
+    const response = await api.get('/admin/analytics');
+    return response.data;
+  },
+
+  // Scraper management
+  getScraperJobs: async () => {
+    const response = await api.get('/admin/scraper/jobs');
+    return response.data;
+  },
+
+  createScraperJob: async (data: any) => {
+    const response = await api.post('/admin/scraper/jobs', data);
+    return response.data;
+  },
+
+  updateScraperJob: async (id: string, data: any) => {
+    const response = await api.put(`/admin/scraper/jobs/${id}`, data);
+    return response.data;
+  },
+
+  deleteScraperJob: async (id: string) => {
+    const response = await api.delete(`/admin/scraper/jobs/${id}`);
+    return response.data;
+  },
+};
+
+export { SUCCESS_MESSAGES, ERROR_MESSAGES };
 
 export default api; 
