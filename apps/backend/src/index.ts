@@ -12,6 +12,7 @@ import scraperRoutes from './routes/scraper';
 import applicationRoutes from './routes/applications';
 import adminRoutes from './routes/admin';
 import healthRoutes from './routes/health';
+import emailDiscoveryRoutes from './routes/emailDiscovery';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -78,6 +79,7 @@ app.use('/api/jobs', jobRoutes);
 app.use('/api/scraper', scraperRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/email-discovery', emailDiscoveryRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
