@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
+import { Progress } from "@/components/ui/progress"
 import { 
   Search, 
   Filter, 
@@ -30,7 +31,13 @@ import {
   CheckCircle,
   XCircle,
   Archive,
-  Loader2
+  Loader2,
+  AtSign,
+  User,
+  Shield,
+  AlertCircle,
+  Copy,
+  RefreshCw
 } from "lucide-react"
 
 interface Job {
@@ -59,6 +66,10 @@ interface Job {
     email: string
     name?: string
     verified: boolean
+    priority?: 'HIGH' | 'MEDIUM' | 'LOW'
+    type?: 'HR' | 'EXECUTIVE' | 'PERSONAL' | 'GENERIC'
+    source?: string
+    discoveredAt?: string
   }>
 }
 
@@ -81,6 +92,36 @@ interface JobStats {
     weeklyDiscovery: number
     activityLevel: string
   }
+}
+
+// Email Discovery interfaces
+interface EmailDiscoveryProgress {
+  stage: string
+  message: string
+  progress: number
+  completedSteps: number
+  totalSteps: number
+}
+
+interface EmailContact {
+  email: string
+  name?: string
+  title?: string
+  priority: 'HIGH' | 'MEDIUM' | 'LOW'
+  type: 'HR' | 'EXECUTIVE' | 'PERSONAL' | 'GENERIC'
+  source: string
+  verified: boolean
+  context?: string
+}
+
+interface EmailDiscoveryResult {
+  success: boolean
+  contacts: EmailContact[]
+  totalFound: number
+  duplicatesRemoved: number
+  websiteAnalyzed: boolean
+  socialProfilesFound: number
+  message?: string
 }
 
 export default function JobsPage() {
@@ -116,6 +157,14 @@ export default function JobsPage() {
     sources: ['twitter'],
     limit: 50
   })
+
+  // Email Discovery states
+  const [emailDiscoveryJob, setEmailDiscoveryJob] = useState<Job | null>(null)
+  const [isEmailDiscoveryOpen, setIsEmailDiscoveryOpen] = useState(false)
+  const [emailDiscoveryProgress, setEmailDiscoveryProgress] = useState<EmailDiscoveryProgress | null>(null)
+  const [isDiscoveringEmails, setIsDiscoveringEmails] = useState<Set<string>>(new Set())
+  const [contactViewJob, setContactViewJob] = useState<Job | null>(null)
+  const [isContactViewOpen, setIsContactViewOpen] = useState(false)
 
   useEffect(() => {
     fetchJobs()
@@ -356,6 +405,139 @@ export default function JobsPage() {
       case 'REJECTED': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
       case 'ARCHIVED': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300'
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300'
+    }
+  }
+
+  // Email Discovery Functions
+  const discoverEmailsForJob = async (job: Job) => {
+    setEmailDiscoveryJob(job)
+    setIsEmailDiscoveryOpen(true)
+    setIsDiscoveringEmails(prev => new Set(prev).add(job.id))
+    
+    try {
+      // Start discovery process
+      setEmailDiscoveryProgress({
+        stage: 'Initializing',
+        message: 'Starting email discovery process...',
+        progress: 0,
+        completedSteps: 0,
+        totalSteps: 5
+      })
+
+      const response = await fetch('/api/email-discovery/discover-job', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          jobId: job.id,
+          company: job.company,
+          jobTitle: job.title,
+          jobUrl: job.url,
+          includeWebsiteAnalysis: true,
+          includeSocialProfiles: true
+        })
+      })
+
+      if (response.ok) {
+        const result: EmailDiscoveryResult = await response.json()
+        
+        setEmailDiscoveryProgress({
+          stage: 'Complete',
+          message: `Found ${result.totalFound} email contacts`,
+          progress: 100,
+          completedSteps: 5,
+          totalSteps: 5
+        })
+
+        // Update the job with new contacts
+        setJobs(prevJobs => 
+          prevJobs.map(j => 
+            j.id === job.id 
+              ? { 
+                  ...j, 
+                  contacts: result.contacts.map(contact => ({
+                    id: `${job.id}-${contact.email}`,
+                    email: contact.email,
+                    name: contact.name,
+                    verified: contact.verified,
+                    priority: contact.priority,
+                    type: contact.type,
+                    source: contact.source,
+                    discoveredAt: new Date().toISOString()
+                  }))
+                }
+              : j
+          )
+        )
+
+        toast({
+          title: "Email Discovery Complete",
+          description: `Found ${result.totalFound} contacts for ${job.company}`,
+        })
+
+        setTimeout(() => {
+          setIsEmailDiscoveryOpen(false)
+          setEmailDiscoveryProgress(null)
+        }, 2000)
+
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to discover emails')
+      }
+    } catch (error) {
+      setEmailDiscoveryProgress({
+        stage: 'Error',
+        message: error instanceof Error ? error.message : 'Discovery failed',
+        progress: 0,
+        completedSteps: 0,
+        totalSteps: 5
+      })
+      
+      toast({
+        title: "Discovery Failed",
+        description: error instanceof Error ? error.message : "Failed to discover emails",
+        variant: "destructive"
+      })
+    } finally {
+      setIsDiscoveringEmails(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(job.id)
+        return newSet
+      })
+    }
+  }
+
+  const viewContacts = (job: Job) => {
+    setContactViewJob(job)
+    setIsContactViewOpen(true)
+  }
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    toast({
+      title: "Copied",
+      description: "Email copied to clipboard"
+    })
+  }
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'HIGH': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+      case 'MEDIUM': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+      case 'LOW': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300'
+    }
+  }
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'HR': return <User className="h-3 w-3" />
+      case 'EXECUTIVE': return <Shield className="h-3 w-3" />
+      case 'PERSONAL': return <AtSign className="h-3 w-3" />
+      case 'GENERIC': return <Mail className="h-3 w-3" />
+      default: return <Mail className="h-3 w-3" />
     }
   }
 
@@ -739,6 +921,33 @@ export default function JobsPage() {
                     </div>
 
                     <div className="flex items-center gap-2 ml-4">
+                      {/* Email Discovery Button */}
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => discoverEmailsForJob(job)}
+                        disabled={isDiscoveringEmails.has(job.id)}
+                      >
+                        {isDiscoveringEmails.has(job.id) ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        ) : (
+                          <AtSign className="h-4 w-4 mr-1" />
+                        )}
+                        {isDiscoveringEmails.has(job.id) ? 'Finding...' : 'Find Emails'}
+                      </Button>
+
+                      {/* View Contacts Button */}
+                      {job.contacts.length > 0 && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => viewContacts(job)}
+                        >
+                          <User className="h-4 w-4 mr-1" />
+                          Contacts ({job.contacts.length})
+                        </Button>
+                      )}
+
                       {job.url && (
                         <Button variant="ghost" size="sm" asChild>
                           <a href={job.url} target="_blank" rel="noopener noreferrer">
@@ -778,6 +987,141 @@ export default function JobsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Email Discovery Progress Dialog */}
+      <Dialog open={isEmailDiscoveryOpen} onOpenChange={setIsEmailDiscoveryOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Email Discovery in Progress</DialogTitle>
+            <DialogDescription>
+              Finding email contacts for {emailDiscoveryJob?.company}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {emailDiscoveryProgress && (
+              <>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>{emailDiscoveryProgress.stage}</span>
+                    <span>{emailDiscoveryProgress.completedSteps}/{emailDiscoveryProgress.totalSteps}</span>
+                  </div>
+                  <Progress value={emailDiscoveryProgress.progress} className="h-2" />
+                  <p className="text-sm text-muted-foreground">
+                    {emailDiscoveryProgress.message}
+                  </p>
+                </div>
+                {emailDiscoveryProgress.stage === 'Complete' && (
+                  <div className="flex items-center gap-2 text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    <span className="text-sm font-medium">Discovery completed successfully!</span>
+                  </div>
+                )}
+                {emailDiscoveryProgress.stage === 'Error' && (
+                  <div className="flex items-center gap-2 text-red-600">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="text-sm font-medium">Discovery failed</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Contact Viewing Dialog */}
+      <Dialog open={isContactViewOpen} onOpenChange={setIsContactViewOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Email Contacts</DialogTitle>
+            <DialogDescription>
+              Found contacts for {contactViewJob?.company} - {contactViewJob?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {contactViewJob?.contacts.map((contact, index) => (
+              <div key={contact.id || index} className="border rounded-lg p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-medium">{contact.email}</span>
+                      {contact.verified && (
+                        <Badge variant="outline" className="text-green-600">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Verified
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center gap-2 mb-2">
+                      {contact.priority && (
+                        <Badge variant="outline" className={getPriorityColor(contact.priority)}>
+                          {contact.priority} Priority
+                        </Badge>
+                      )}
+                      {contact.type && (
+                        <Badge variant="outline" className="flex items-center gap-1">
+                          {getTypeIcon(contact.type)}
+                          {contact.type}
+                        </Badge>
+                      )}
+                    </div>
+
+                    {contact.name && (
+                      <p className="text-sm text-muted-foreground mb-1">
+                        <User className="h-3 w-3 inline mr-1" />
+                        {contact.name}
+                      </p>
+                    )}
+                    
+                    {contact.source && (
+                      <p className="text-sm text-muted-foreground mb-1">
+                        <Search className="h-3 w-3 inline mr-1" />
+                        Found via: {contact.source}
+                      </p>
+                    )}
+
+                    {contact.discoveredAt && (
+                      <p className="text-sm text-muted-foreground">
+                        <Clock className="h-3 w-3 inline mr-1" />
+                        Discovered: {new Date(contact.discoveredAt).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(contact.email)}
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    Copy
+                  </Button>
+                </div>
+              </div>
+            ))}
+            
+            {(!contactViewJob?.contacts || contactViewJob.contacts.length === 0) && (
+              <div className="text-center py-8">
+                <Mail className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No contacts found for this job</p>
+                <Button 
+                  variant="outline" 
+                  className="mt-2"
+                  onClick={() => contactViewJob && discoverEmailsForJob(contactViewJob)}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Try Discovery
+                </Button>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsContactViewOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 } 
