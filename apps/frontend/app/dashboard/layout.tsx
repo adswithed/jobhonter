@@ -8,7 +8,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { siteConfig } from "@/lib/constants"
 import { ModeToggle } from "@/components/mode-toggle"
 import { Button } from "@/components/ui/button"
-import { BarChart, Bell, Bot, CreditCard, FileText, LogOut, Mail, Menu, Settings, User } from "lucide-react"
+import { BarChart, Bell, Bot, CreditCard, FileText, LogOut, Mail, Menu, Settings, User, Target, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -91,6 +91,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       title: "Dashboard",
       href: "/dashboard",
       icon: <BarChart className="h-4 w-4" />,
+    },
+    {
+      title: "Job Discovery",
+      href: "/dashboard/jobs",
+      icon: <Search className="h-4 w-4" />,
     },
     {
       title: "My Agent",
