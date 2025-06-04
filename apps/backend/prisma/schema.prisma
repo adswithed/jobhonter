@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -15,7 +15,7 @@ model User {
   email     String   @unique
   name      String
   password  String
-  role      Role     @default(USER)
+  role      String   @default("USER") // USER, ADMIN
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -35,12 +35,12 @@ model Job {
   location       String?
   salary         String?
   url            String?
-  source         JobSource
+  source         String    // TWITTER, REDDIT, LINKEDIN, GOOGLE, FACEBOOK, BING, YAHOO, YANDEX
   sourceUrl      String?
   contactEmail   String?
   discoveredAt   DateTime  @default(now())
   relevanceScore Float     @default(0.0)
-  status         JobStatus @default(DISCOVERED)
+  status         String    @default("DISCOVERED") // DISCOVERED, FILTERED, APPLIED, REJECTED, ARCHIVED
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -57,7 +57,7 @@ model Job {
 
 model Application {
   id          String            @id @default(cuid())
-  status      ApplicationStatus @default(PENDING)
+  status      String            @default("PENDING") // PENDING, SENT, DELIVERED, OPENED, REPLIED, REJECTED, INTERVIEW, OFFER, DECLINED
   appliedAt   DateTime          @default(now())
   emailSent   Boolean           @default(false)
   emailId     String?
@@ -78,7 +78,7 @@ model Application {
 
 model ApplicationResponse {
   id          String               @id @default(cuid())
-  type        ApplicationRespType
+  type        String               // POSITIVE, NEGATIVE, NEUTRAL
   content     String
   receivedAt  DateTime             @default(now())
   createdAt   DateTime             @default(now())
@@ -118,8 +118,8 @@ model EmailTemplate {
   name      String
   subject   String
   body      String
-  variables Json
-  type      EmailTemplateType
+  variables String // JSON as text in SQLite
+  type      String // COVER_LETTER, FOLLOW_UP, THANK_YOU, CUSTOM
   isDefault Boolean              @default(false)
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
@@ -129,13 +129,13 @@ model EmailTemplate {
 
 model ScrapingJob {
   id          String         @id @default(cuid())
-  source      JobSource
+  source      String         // TWITTER, REDDIT, LINKEDIN, GOOGLE, FACEBOOK, BING, YAHOO, YANDEX
   query       String
-  status      ScrapingStatus @default(SCHEDULED)
+  status      String         @default("SCHEDULED") // SCHEDULED, RUNNING, COMPLETED, FAILED, CANCELLED
   scheduledAt DateTime
   startedAt   DateTime?
   completedAt DateTime?
-  results     Json
+  results     String // JSON as text in SQLite
   error       String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
@@ -145,17 +145,17 @@ model ScrapingJob {
 
 model UserPreferences {
   id                    String   @id @default(cuid())
-  jobKeywords           String[]
-  jobLocations          String[]
+  jobKeywords           String // JSON array as text in SQLite
+  jobLocations          String // JSON array as text in SQLite
   salaryMin             Int?
   salaryMax             Int?
-  jobTypes              String[]
-  experienceLevel       String[]
+  jobTypes              String // JSON array as text in SQLite
+  experienceLevel       String // JSON array as text in SQLite
   emailDefaultTemplate  String?
   emailSendTime         String   @default("09:00")
   emailTimezone         String   @default("UTC")
   emailFrequency        String   @default("immediate")
-  scrapingSources       String[]
+  scrapingSources       String // JSON array as text in SQLite
   scrapingFrequency     Int      @default(24)
   maxApplicationsPerDay Int      @default(10)
   createdAt             DateTime @default(now())
@@ -193,62 +193,4 @@ model UserAnalytics {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_analytics")
-}
-
-// Enums
-enum Role {
-  USER
-  ADMIN
-}
-
-enum JobSource {
-  TWITTER
-  REDDIT
-  LINKEDIN
-  GOOGLE
-  FACEBOOK
-  BING
-  YAHOO
-  YANDEX
-}
-
-enum JobStatus {
-  DISCOVERED
-  FILTERED
-  APPLIED
-  REJECTED
-  ARCHIVED
-}
-
-enum ApplicationStatus {
-  PENDING
-  SENT
-  DELIVERED
-  OPENED
-  REPLIED
-  REJECTED
-  INTERVIEW
-  OFFER
-  DECLINED
-}
-
-enum ApplicationRespType {
-  POSITIVE
-  NEGATIVE
-  NEUTRAL
-}
-
-enum EmailTemplateType {
-  COVER_LETTER
-  FOLLOW_UP
-  THANK_YOU
-  CUSTOM
-}
-
-enum ScrapingStatus {
-  SCHEDULED
-  RUNNING
-  COMPLETED
-  FAILED
-  CANCELLED
 } 
