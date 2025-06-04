@@ -8,6 +8,7 @@ import { PrismaClient } from '@prisma/client';
 // Import routes
 import authRoutes from './routes/auth';
 import jobRoutes from './routes/jobs';
+import scraperRoutes from './routes/scraper';
 import applicationRoutes from './routes/applications';
 import adminRoutes from './routes/admin';
 import healthRoutes from './routes/health';
@@ -74,6 +75,7 @@ app.use('/health', healthRoutes);
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
+app.use('/api/scraper', scraperRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/admin', adminRoutes);
 
@@ -113,6 +115,7 @@ async function startServer() {
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`🔗 API base URL: http://localhost:${PORT}/api`);
       console.log(`🛡️ Admin API: http://localhost:${PORT}/api/admin`);
+      console.log(`🤖 Scraper API: http://localhost:${PORT}/api/scraper`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   } catch (error) {
