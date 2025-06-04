@@ -1,14 +1,22 @@
 import axios from 'axios';
 
 const ERROR_MESSAGES = {
-  NETWORK: "🌐 Looks like our job hunters got lost in cyberspace! Check your internet and let's get back to the hunt.",
-  DUPLICATE_EMAIL: "📧 That email is already on our recruitment list! Time to dust off your login credentials instead.",
-  INVALID_CREDENTIALS: "🔍 Hmm, those credentials didn't match our database. Even our AI agents couldn't find a match! Double-check and try again.",
-  VALIDATION: "📋 Whoops! Some fields are playing hard to get. Fill them all out and let's make this application complete!",
-  SERVER: "⚙️ Our job-hunting servers are taking a coffee break! Give us a moment to get them back on the grind.",
+  NETWORK: "🌐 Network connection hiccup! Check your internet and try again.",
+  DUPLICATE_EMAIL: "📧 That email is already part of the hunting crew! Try logging in instead.",
+  INVALID_CREDENTIALS: "🔍 Hmm, those credentials didn't match our database. Even our AI agents couldn't find a match!",
+  VALIDATION: "📝 Some fields need a bit more attention. Check your inputs, hunter!",
+  SERVER: "🔧 Our servers are taking a quick coffee break! Try again in a moment.",
   UNAUTHORIZED: "🚫 You'll need to punch in your credentials first. No freeloading in the job hunt!",
   FORBIDDEN: "🔒 This area is for the hiring managers only! Stick to your designated hunting grounds.",
-  DEFAULT: "🤔 Something unexpected happened in the job hunt. But hey, persistence pays off - try again!"
+  DEFAULT: "🤔 Something unexpected happened in the job hunt. But hey, persistence pays off - try again!",
+  LOGIN_FAILED: "🔍 Login failed. Please check your credentials and try again.",
+  ADMIN_LOGIN_FAILED: "🛡️ Admin login failed. Please check your credentials and try again.",
+  SIGNUP_FAILED: "🤔 Signup failed. Please check the provided information and try again.",
+  PROFILE_FETCH_FAILED: "🤔 Failed to fetch profile. Please try again later.",
+  PROFILE_UPDATE_FAILED: "🤔 Failed to update profile. Please try again later.",
+  PASSWORD_CHANGE_FAILED: "🔍 Password change failed. Please check the provided information and try again.",
+  ACCOUNT_DELETE_FAILED: "🤔 Failed to delete account. Please try again later.",
+  LOGOUT_FAILED: "🤔 Logout failed. Please try again later."
 };
 
 const SUCCESS_MESSAGES = {
@@ -18,7 +26,14 @@ const SUCCESS_MESSAGES = {
   PROFILE_UPDATED: "✅ Profile updated! You're looking more hireable already!",
   APPLICATION_SENT: "🚀 Application fired off! Another shot at your dream job!",
   JOB_SAVED: "📌 Job saved to your hunting list! Time to prepare for the attack!",
-  EMAIL_SENT: "📬 Email deployed! Your personal job-hunting missile is en route!"
+  EMAIL_SENT: "📬 Email deployed! Your personal job-hunting missile is en route!",
+  LOGIN_SUCCESS: "🎯 Login successful! Welcome back, job hunter!",
+  ADMIN_LOGIN_SUCCESS: "🛡️ Admin access granted! Welcome to the command center, chief!",
+  SIGNUP_SUCCESS: "🎉 Account created! Welcome to the most efficient job hunting crew in town!",
+  PROFILE_UPDATE_SUCCESS: "✅ Profile updated! You're looking more hireable already!",
+  PASSWORD_CHANGE_SUCCESS: "✅ Password changed successfully!",
+  ACCOUNT_DELETE_SUCCESS: "👋 Account deleted successfully. We're sorry to see you go!",
+  LOGOUT_SUCCESS: "👋 Logged out successfully. May your next login bring even better opportunities!"
 };
 
 const api = axios.create({
@@ -100,20 +115,16 @@ export interface AuthResponse {
 }
 
 export const authApi = {
-  register: async (data: RegisterData): Promise<AuthResponse> => {
-    const response = await api.post('/auth/register', data);
-    return {
-      ...response.data.data,
-      message: SUCCESS_MESSAGES.REGISTER
-    };
-  },
-
-  login: async (data: LoginCredentials): Promise<AuthResponse> => {
-    const response = await api.post('/auth/login', data);
-    return {
-      ...response.data.data,
-      message: SUCCESS_MESSAGES.LOGIN
-    };
+  login: async (email: string, password: string): Promise<AuthResponse> => {
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      return {
+        ...response.data.data,
+        message: SUCCESS_MESSAGES.LOGIN_SUCCESS
+      };
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || ERROR_MESSAGES.LOGIN_FAILED);
+    }
   },
 
   logout: async (): Promise<{ message: string }> => {
@@ -128,22 +139,77 @@ export const authApi = {
   },
 
   getProfile: async (): Promise<{ user: User }> => {
-    const response = await api.get('/auth/profile');
-    return response.data.data;
+    try {
+      const response = await api.get('/auth/profile');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || ERROR_MESSAGES.PROFILE_FETCH_FAILED);
+    }
+  },
+
+  updateProfile: async (name: string, email: string): Promise<AuthResponse> => {
+    try {
+      const response = await api.put('/auth/profile', { name, email });
+      return {
+        ...response.data.data,
+        message: SUCCESS_MESSAGES.PROFILE_UPDATE_SUCCESS
+      };
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || ERROR_MESSAGES.PROFILE_UPDATE_FAILED);
+    }
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string, confirmPassword: string): Promise<AuthResponse> => {
+    try {
+      const response = await api.put('/auth/password', {
+        currentPassword,
+        newPassword,
+        confirmPassword
+      });
+      return {
+        ...response.data.data,
+        message: SUCCESS_MESSAGES.PASSWORD_CHANGE_SUCCESS
+      };
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || ERROR_MESSAGES.PASSWORD_CHANGE_FAILED);
+    }
+  },
+
+  deleteAccount: async (): Promise<{ message: string }> => {
+    try {
+      await api.delete('/auth/account');
+    } finally {
+      // Clear local storage and cookies regardless of API response
+      localStorage.removeItem('token');
+      document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    }
+    return { message: SUCCESS_MESSAGES.ACCOUNT_DELETE_SUCCESS };
   },
 
   // Admin-specific auth methods
-  adminLogin: async (data: LoginCredentials): Promise<AuthResponse> => {
-    const response = await api.post('/auth/admin/login', data);
-    return {
-      ...response.data.data,
-      message: "🛡️ Admin access granted! Welcome to the command center, chief!"
-    };
+  adminLogin: async (email: string, password: string): Promise<AuthResponse> => {
+    try {
+      const response = await api.post('/auth/admin/login', { email, password });
+      return {
+        ...response.data.data,
+        message: SUCCESS_MESSAGES.ADMIN_LOGIN_SUCCESS
+      };
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || ERROR_MESSAGES.ADMIN_LOGIN_FAILED);
+    }
   },
 
   checkAdminAccess: async (): Promise<{ user: User }> => {
     const response = await api.get('/auth/admin/profile');
     return response.data.data;
+  },
+
+  signup: async (name: string, email: string, password: string): Promise<AuthResponse> => {
+    const response = await api.post('/auth/register', { name, email, password });
+    return {
+      ...response.data.data,
+      message: SUCCESS_MESSAGES.SIGNUP_SUCCESS
+    };
   },
 };
 

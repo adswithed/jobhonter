@@ -348,6 +348,163 @@ router.post('/logout', auth, async (req: AuthenticatedRequest, res: express.Resp
   }
 });
 
+// Update user profile
+router.put('/profile', [
+  auth,
+  body('name').trim().isLength({ min: 2 }).withMessage('Name must be at least 2 characters'),
+  body('email').isEmail().withMessage('Please provide a valid email address')
+], async (req: AuthenticatedRequest, res: express.Response) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: '📝 Profile update data has some issues. Check your fields, hunter!',
+        errors: errors.array()
+      });
+    }
+
+    const { name, email } = req.body;
+    const userId = req.user!.id;
+
+    // Check if email is already taken by another user
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email,
+        id: { not: userId }
+      }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: '📧 That email is already claimed by another hunter! Choose a different one.'
+      });
+    }
+
+    // Update user profile
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { name, email },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    res.json({
+      success: true,
+      message: '🎯 Profile updated! You\'re looking more hireable already!',
+      data: { user: updatedUser }
+    });
+
+  } catch (error) {
+    console.error('Profile update error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Profile update servers are having technical difficulties! Try again later.'
+    });
+  }
+});
+
+// Change password
+router.put('/password', [
+  auth,
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+  body('confirmPassword').custom((value, { req }) => {
+    if (value !== req.body.newPassword) {
+      throw new Error('Password confirmation does not match new password');
+    }
+    return value;
+  })
+], async (req: AuthenticatedRequest, res: express.Response) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: '🔐 Password change requirements not met. Check your inputs!',
+        errors: errors.array()
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user!.id;
+
+    // Get current user with password
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Hunter profile not found in our database!'
+      });
+    }
+
+    // Verify current password
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+    if (!isValidPassword) {
+      return res.status(400).json({
+        success: false,
+        message: '🔑 Current password is incorrect. Even hunters need the right key!'
+      });
+    }
+
+    // Hash new password
+    const saltRounds = 12;
+    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedNewPassword }
+    });
+
+    res.json({
+      success: true,
+      message: '🛡️ Password updated! Your hunting credentials are now more secure!'
+    });
+
+  } catch (error) {
+    console.error('Password change error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Password update servers are temporarily unavailable! Try again later.'
+    });
+  }
+});
+
+// Delete account
+router.delete('/account', auth, async (req: AuthenticatedRequest, res: express.Response) => {
+  try {
+    const userId = req.user!.id;
+
+    // Delete user account (this will cascade delete related data)
+    await prisma.user.delete({
+      where: { id: userId }
+    });
+
+    res.json({
+      success: true,
+      message: '👋 Account deleted. You\'ve been removed from the hunting crew! We\'ll miss you!'
+    });
+
+  } catch (error) {
+    console.error('Account deletion error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Account deletion servers are having issues! Please try again or contact support.'
+    });
+  }
+});
+
 // Create admin user (for initial setup)
 router.post('/admin/create', async (req: express.Request, res: express.Response) => {
   try {

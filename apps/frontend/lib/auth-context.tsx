@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
-    const response = await authApi.login({ email, password });
+    const response = await authApi.login(email, password);
     
     if (response.token) {
       localStorage.setItem('token', response.token);
@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adminLogin = async (email: string, password: string) => {
-    const response = await authApi.adminLogin({ email, password });
+    const response = await authApi.adminLogin(email, password);
     
     if (response.token) {
       localStorage.setItem('token', response.token);
@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const register = async (name: string, email: string, password: string) => {
-    const response = await authApi.register({ name, email, password });
+    const response = await authApi.signup(name, email, password);
     
     if (response.token) {
       localStorage.setItem('token', response.token);
