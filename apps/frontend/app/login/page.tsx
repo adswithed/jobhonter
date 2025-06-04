@@ -7,14 +7,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Zap } from "lucide-react"
+import { Zap, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { siteConfig } from "@/lib/constants"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
 
 export default function LoginPage() {
   const router = useRouter()
+  const { login } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -27,6 +30,8 @@ export default function LoginPage() {
       ...prev,
       [name]: value,
     }))
+    // Clear error when user starts typing
+    if (error) setError("")
   }
 
   const handleCheckboxChange = (checked: boolean) => {
@@ -39,12 +44,27 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError("")
 
-    // Simulate authentication
-    setTimeout(() => {
-      setIsLoading(false)
+    try {
+      // Use auth context login method
+      await login(formData.email, formData.password)
+
+      // Set cookie if remember me is checked
+      if (formData.rememberMe) {
+        const token = localStorage.getItem('token')
+        if (token) {
+          document.cookie = `token=${token}; max-age=${30 * 24 * 60 * 60}; path=/` // 30 days
+        }
+      }
+
+      // Redirect to dashboard
       router.push("/dashboard")
-    }, 1500)
+    } catch (err: any) {
+      setError(err.message || "Login failed. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -60,6 +80,13 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-card border rounded-lg p-8 shadow-sm">
+          {error && (
+            <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md flex items-center gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              {error}
+            </div>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
