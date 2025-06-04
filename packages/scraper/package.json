@@ -1,27 +1,47 @@
 {
   "name": "@jobhonter/scraper",
   "version": "0.1.0",
-  "description": "Multi-platform job scraping engine for JobHonter",
+  "description": "JobHonter job scraping engine for multiple platforms",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist",
+    "test": "jest --passWithNoTests",
     "lint": "eslint src/**/*.ts",
-    "type-check": "tsc --noEmit"
+    "clean": "rm -rf dist"
   },
-  "keywords": ["jobhonter", "scraper", "jobs", "automation"],
+  "keywords": [
+    "job-scraping",
+    "web-scraping",
+    "automation",
+    "job-hunting"
+  ],
   "author": "JobHonter Team",
   "license": "MIT",
   "dependencies": {
-    "@jobhonter/core": "workspace:*",
-    "axios": "^1.9.0",
-    "cheerio": "^1.0.0",
-    "puppeteer": "^23.0.0"
+    "puppeteer": "^22.0.0",
+    "cheerio": "^1.0.0-rc.12",
+    "axios": "^1.6.0",
+    "user-agents": "^1.1.0",
+    "p-queue": "^8.0.1",
+    "p-retry": "^6.2.0",
+    "rate-limiter-flexible": "^4.0.1",
+    "winston": "^3.11.0",
+    "zod": "^3.22.0",
+    "date-fns": "^3.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
-    "@types/node": "^22.0.0"
+    "@types/node": "^20.0.0",
+    "@types/jest": "^29.5.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.50.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.3.0"
+  },
+  "publishConfig": {
+    "access": "restricted"
   }
 } 
