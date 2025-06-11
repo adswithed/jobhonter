@@ -58,6 +58,7 @@ export interface SearchParams {
   remote?: boolean;
   salaryMin?: number;
   salaryMax?: number;
+  searchMode?: 'strict' | 'moderate' | 'loose';
   limit?: number;
   offset?: number;
 }

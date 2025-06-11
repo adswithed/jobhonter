@@ -1,46 +1,40 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Search, 
-  Filter, 
-  Plus, 
-  Eye, 
-  Edit, 
-  Trash2, 
   MapPin, 
   DollarSign, 
   Calendar,
   ExternalLink,
   Building,
   Mail,
+  Loader2,
+  Copy,
+  Target,
+  CheckCircle2,
+  MessageSquare,
+  Globe,
+  Users,
+  Zap,
+  Plus,
+  Eye,
   Clock,
   TrendingUp,
-  Target,
-  CheckCircle,
-  XCircle,
-  Archive,
-  Loader2,
-  AtSign,
-  User,
-  Shield,
-  AlertCircle,
-  Copy,
-  RefreshCw
+  Wifi,
+  Database,
+  Filter,
+  CheckCircle
 } from "lucide-react"
 
-interface Job {
+interface DiscoveredJob {
   id: string
   title: string
   company: string
@@ -49,1079 +43,839 @@ interface Job {
   salary?: string
   url?: string
   source: string
-  contactEmail?: string
-  discoveredAt: string
-  relevanceScore: number
-  status: 'DISCOVERED' | 'FILTERED' | 'APPLIED' | 'REJECTED' | 'ARCHIVED'
-  createdAt: string
-  updatedAt: string
-  applications: Array<{
-    id: string
-    status: string
-    appliedAt: string
-    emailSent: boolean
-  }>
-  contacts: Array<{
-    id: string
+  remote?: boolean
+  contact?: {
     email: string
-    name?: string
-    verified: boolean
-    priority?: 'HIGH' | 'MEDIUM' | 'LOW'
-    type?: 'HR' | 'EXECUTIVE' | 'PERSONAL' | 'GENERIC'
-    source?: string
-    discoveredAt?: string
-  }>
-}
-
-interface JobStats {
-  jobs: {
-    total: number
-    discovered: number
-    applied: number
-    rejected: number
-    archived: number
-    recentlyDiscovered: number
   }
-  applications: {
-    total: number
-    pending: number
-    rate: number
-  }
-  insights: {
-    applicationRate: string
-    weeklyDiscovery: number
-    activityLevel: string
+  contactEmail?: string
+  postedAt?: string
+  redditMetadata?: {
+    subreddit: string
+    author: string
+    ups: number
+    comments: number
   }
 }
 
-// Email Discovery interfaces
-interface EmailDiscoveryProgress {
+interface ScrapingProgress {
   stage: string
   message: string
   progress: number
-  completedSteps: number
+  currentStep: number
   totalSteps: number
+  details?: string
 }
 
-interface EmailContact {
-  email: string
-  name?: string
-  title?: string
-  priority: 'HIGH' | 'MEDIUM' | 'LOW'
-  type: 'HR' | 'EXECUTIVE' | 'PERSONAL' | 'GENERIC'
-  source: string
-  verified: boolean
-  context?: string
-}
+export default function JobDiscoveryPage() {
+  // Search state
+  const [jobTitle, setJobTitle] = useState('')
+  const [location, setLocation] = useState('')
+  const [source, setSource] = useState('reddit')
+  const [searchMode, setSearchMode] = useState<'strict' | 'moderate' | 'loose'>('moderate')
+  const [remoteOnly, setRemoteOnly] = useState(false)
+  const [maxDaysOld, setMaxDaysOld] = useState(7)
+  const [onlyHiring, setOnlyHiring] = useState(true)
+  
+  // Results state
+  const [loading, setLoading] = useState(false)
+  const [discoveredJobs, setDiscoveredJobs] = useState<DiscoveredJob[]>([])
+  const [searchResults, setSearchResults] = useState<any>(null)
+  
+  // Real-time progress state
+  const [scrapingProgress, setScrapingProgress] = useState<ScrapingProgress | null>(null)
+  const [showProgress, setShowProgress] = useState(false)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const sessionIdRef = useRef<string>('')
 
-interface EmailDiscoveryResult {
-  success: boolean
-  contacts: EmailContact[]
-  totalFound: number
-  duplicatesRemoved: number
-  websiteAnalyzed: boolean
-  socialProfilesFound: number
-  message?: string
-}
+  // Generate unique session ID
+  const generateSessionId = () => {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
 
-export default function JobsPage() {
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [stats, setStats] = useState<JobStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [sourceFilter, setSourceFilter] = useState('all')
-  const [sortBy, setSortBy] = useState('createdAt')
-  const [sortOrder, setSortOrder] = useState('desc')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isDiscoverDialogOpen, setIsDiscoverDialogOpen] = useState(false)
+  // Connect to real-time progress feed
+  const connectToProgressFeed = (sessionId: string) => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+    }
 
-  // Form states
-  const [newJob, setNewJob] = useState({
-    title: '',
-    company: '',
-    description: '',
-    location: '',
-    salary: '',
-    url: '',
-    contactEmail: ''
-  })
+    console.log('🔌 Connecting to progress feed:', sessionId)
+    
+    const eventSource = new EventSource(`http://localhost:3001/api/scraper/progress/${sessionId}`)
+    eventSourceRef.current = eventSource
 
-  const [discoverParams, setDiscoverParams] = useState({
-    keywords: [''],
-    location: '',
-    remote: false,
-    jobTypes: [] as string[],
-    sources: ['twitter'],
-    limit: 50
-  })
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        console.log('📡 Progress update received:', data)
 
-  // Email Discovery states
-  const [emailDiscoveryJob, setEmailDiscoveryJob] = useState<Job | null>(null)
-  const [isEmailDiscoveryOpen, setIsEmailDiscoveryOpen] = useState(false)
-  const [emailDiscoveryProgress, setEmailDiscoveryProgress] = useState<EmailDiscoveryProgress | null>(null)
-  const [isDiscoveringEmails, setIsDiscoveringEmails] = useState<Set<string>>(new Set())
-  const [contactViewJob, setContactViewJob] = useState<Job | null>(null)
-  const [isContactViewOpen, setIsContactViewOpen] = useState(false)
-
-  useEffect(() => {
-    fetchJobs()
-    fetchStats()
-  }, [searchTerm, statusFilter, sourceFilter, sortBy, sortOrder, currentPage])
-
-  const fetchJobs = async () => {
-    setLoading(true)
-    try {
-      const queryParams = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: '20',
-        ...(searchTerm && { search: searchTerm }),
-        ...(statusFilter !== 'all' && { status: statusFilter }),
-        ...(sourceFilter !== 'all' && { source: sourceFilter }),
-        sortBy,
-        sortOrder
-      })
-
-      const response = await fetch(`/api/jobs?${queryParams}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        if (data.type === 'connected') {
+          console.log('✅ Connected to real-time feed')
+        } else if (data.type === 'progress') {
+          setScrapingProgress({
+            stage: data.stage,
+            message: data.message,
+            progress: data.progress,
+            currentStep: Math.floor(data.progress / 14.28), // Rough estimate
+            totalSteps: 7,
+            details: data.details
+          })
+        } else if (data.type === 'complete') {
+          setScrapingProgress({
+            stage: 'complete',
+            message: '🎉 Search completed successfully!',
+            progress: 100,
+            currentStep: 7,
+            totalSteps: 7,
+            details: 'Ready to display results'
+          })
         }
+      } catch (error) {
+        console.error('Failed to parse SSE data:', error)
+      }
+    }
+
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error)
+      eventSource.close()
+    }
+
+    return eventSource
+  }
+
+  // Cleanup SSE connection on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+      }
+    }
+  }, [])
+
+  const discoverJobs = async () => {
+    if (!jobTitle.trim()) {
+      toast({
+        title: "Job Title Required",
+        description: "Please enter a job title to search for opportunities",
+        variant: "destructive"
       })
+      return
+    }
+
+    setLoading(true)
+    setShowProgress(true)
+    setDiscoveredJobs([]) // Clear previous results
+    setSearchResults(null)
+    
+    // Generate session ID for this search
+    const sessionId = generateSessionId()
+    sessionIdRef.current = sessionId
+    
+    // Connect to real-time progress feed
+    connectToProgressFeed(sessionId)
+
+    try {
+      const endpoint = source === 'reddit' ? 'http://localhost:3001/api/scraper/test-reddit' : 'http://localhost:3001/api/scraper/test-discover'
+      
+      console.log('🔍 Starting job search with:', {
+        endpoint,
+        keywords: [jobTitle.trim()],
+        location: location.trim() || undefined,
+        remote: remoteOnly,
+        limit: 20,
+        sessionId // Include session ID for backend progress tracking
+      })
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          keywords: [jobTitle.trim()],
+          location: location.trim() || undefined,
+          remote: remoteOnly,
+          limit: 20,
+          sessionId, // Send session ID to backend
+          maxDaysOld, // Date filter
+          onlyHiring, // Smart hiring filter
+          searchMode
+        })
+      })
+
+      console.log('📡 API Response status:', response.status)
 
       if (response.ok) {
         const data = await response.json()
-        setJobs(data.data.jobs)
-      } else {
+        console.log('📊 API Response data:', data)
+        
+        const jobs = data.data?.jobs || data.jobs || []
+        console.log('💼 Jobs extracted:', jobs.length, jobs)
+        
+        setDiscoveredJobs(jobs)
+        setSearchResults(data.data || data)
+        
+        // Debug logging to see the actual structure
+        console.log('🔧 Full API response:', data)
+        console.log('🔧 Stored searchResults:', data.data || data)
+        console.log('🔧 resultSets:', (data.data || data)?.resultSets)
+        
+        const contactJobs = jobs.filter((job: DiscoveredJob) => job.contact?.email || job.contactEmail)
+        
         toast({
-          title: "Error",
-          description: "Failed to fetch jobs",
+          title: "🎉 Jobs Found!",
+          description: `Found ${jobs.length} jobs, ${contactJobs.length} with direct contact info`,
+          duration: 5000,
+        })
+        
+        console.log('✅ Search completed successfully')
+      } else {
+        const errorText = await response.text()
+        console.error('❌ API Error:', response.status, errorText)
+        
+        toast({
+          title: "Search Failed",
+          description: `API returned ${response.status}: ${errorText}`,
           variant: "destructive"
         })
       }
     } catch (error) {
+      console.error('🚨 Network error:', error)
       toast({
-        title: "Error",
-        description: "Network error occurred",
+        title: "Network Error",
+        description: `Connection failed: ${error}`,
         variant: "destructive"
       })
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/jobs/stats', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setStats(data.data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch stats:', error)
-    }
-  }
-
-  const createJob = async () => {
-    try {
-      const response = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(newJob)
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        toast({
-          title: "Success",
-          description: data.message
-        })
-        setIsCreateDialogOpen(false)
-        setNewJob({
-          title: '',
-          company: '',
-          description: '',
-          location: '',
-          salary: '',
-          url: '',
-          contactEmail: ''
-        })
-        fetchJobs()
-        fetchStats()
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to create job",
-          variant: "destructive"
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Network error occurred",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const updateJobStatus = async (jobId: string, status: string) => {
-    try {
-      const response = await fetch(`/api/jobs/${jobId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ status })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        toast({
-          title: "Success",
-          description: data.message
-        })
-        fetchJobs()
-        fetchStats()
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to update job status",
-          variant: "destructive"
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Network error occurred",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const deleteJob = async (jobId: string) => {
-    if (!confirm('Are you sure you want to delete this job?')) return
-
-    try {
-      const response = await fetch(`/api/jobs/${jobId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        toast({
-          title: "Success",
-          description: data.message
-        })
-        fetchJobs()
-        fetchStats()
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to delete job",
-          variant: "destructive"
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Network error occurred",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const discoverJobs = async () => {
-    try {
-      const response = await fetch('/api/scraper/discover', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          ...discoverParams,
-          keywords: discoverParams.keywords.filter(k => k.trim())
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        toast({
-          title: "Discovery Complete",
-          description: data.message
-        })
-        setIsDiscoverDialogOpen(false)
-        fetchJobs()
-        fetchStats()
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to discover jobs",
-          variant: "destructive"
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Network error occurred",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'DISCOVERED': return <Eye className="h-4 w-4" />
-      case 'FILTERED': return <Target className="h-4 w-4" />
-      case 'APPLIED': return <CheckCircle className="h-4 w-4" />
-      case 'REJECTED': return <XCircle className="h-4 w-4" />
-      case 'ARCHIVED': return <Archive className="h-4 w-4" />
-      default: return <Eye className="h-4 w-4" />
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'DISCOVERED': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
-      case 'FILTERED': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300'
-      case 'APPLIED': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-      case 'REJECTED': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
-      case 'ARCHIVED': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300'
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300'
-    }
-  }
-
-  // Email Discovery Functions
-  const discoverEmailsForJob = async (job: Job) => {
-    setEmailDiscoveryJob(job)
-    setIsEmailDiscoveryOpen(true)
-    setIsDiscoveringEmails(prev => new Set(prev).add(job.id))
-    
-    try {
-      // Start discovery process
-      setEmailDiscoveryProgress({
-        stage: 'Initializing',
-        message: 'Starting email discovery process...',
-        progress: 0,
-        completedSteps: 0,
-        totalSteps: 5
-      })
-
-      const response = await fetch('/api/email-discovery/discover-job', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          jobId: job.id,
-          company: job.company,
-          jobTitle: job.title,
-          jobUrl: job.url,
-          includeWebsiteAnalysis: true,
-          includeSocialProfiles: true
-        })
-      })
-
-      if (response.ok) {
-        const result: EmailDiscoveryResult = await response.json()
-        
-        setEmailDiscoveryProgress({
-          stage: 'Complete',
-          message: `Found ${result.totalFound} email contacts`,
-          progress: 100,
-          completedSteps: 5,
-          totalSteps: 5
-        })
-
-        // Update the job with new contacts
-        setJobs(prevJobs => 
-          prevJobs.map(j => 
-            j.id === job.id 
-              ? { 
-                  ...j, 
-                  contacts: result.contacts.map(contact => ({
-                    id: `${job.id}-${contact.email}`,
-                    email: contact.email,
-                    name: contact.name,
-                    verified: contact.verified,
-                    priority: contact.priority,
-                    type: contact.type,
-                    source: contact.source,
-                    discoveredAt: new Date().toISOString()
-                  }))
-                }
-              : j
-          )
-        )
-
-        toast({
-          title: "Email Discovery Complete",
-          description: `Found ${result.totalFound} contacts for ${job.company}`,
-        })
-
-        setTimeout(() => {
-          setIsEmailDiscoveryOpen(false)
-          setEmailDiscoveryProgress(null)
-        }, 2000)
-
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Failed to discover emails')
-      }
-    } catch (error) {
-      setEmailDiscoveryProgress({
-        stage: 'Error',
-        message: error instanceof Error ? error.message : 'Discovery failed',
-        progress: 0,
-        completedSteps: 0,
-        totalSteps: 5
-      })
       
+      // Close SSE connection after a delay
+      setTimeout(() => {
+        if (eventSourceRef.current) {
+          console.log('🔌 Closing SSE connection')
+          eventSourceRef.current.close()
+          eventSourceRef.current = null
+        }
+        setShowProgress(false)
+        setScrapingProgress(null)
+      }, 3000) // Show completion for 3 seconds
+    }
+  }
+
+  // Helper functions
+  const copyToClipboard = async (text: string, label: string = 'text') => {
+    try {
+      await navigator.clipboard.writeText(text)
       toast({
-        title: "Discovery Failed",
-        description: error instanceof Error ? error.message : "Failed to discover emails",
+        title: `✅ ${label} copied!`,
+        description: `${text} has been copied to your clipboard`,
+      })
+    } catch (err) {
+      console.error('Failed to copy text: ', err)
+      toast({
+        title: "Copy failed",
+        description: "Please copy the email manually",
         variant: "destructive"
       })
-    } finally {
-      setIsDiscoveringEmails(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(job.id)
-        return newSet
-      })
     }
   }
 
-  const viewContacts = (job: Job) => {
-    setContactViewJob(job)
-    setIsContactViewOpen(true)
+  const getContactEmail = (job: DiscoveredJob) => {
+    return job.contact?.email || job.contactEmail
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast({
-      title: "Copied",
-      description: "Email copied to clipboard"
-    })
+  const formatSalary = (salary?: string) => {
+    return salary?.replace(/^\$/, '') || null
   }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'HIGH': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
-      case 'MEDIUM': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-      case 'LOW': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300'
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300'
-    }
+  const formatPostingDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString()
   }
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'HR': return <User className="h-3 w-3" />
-      case 'EXECUTIVE': return <Shield className="h-3 w-3" />
-      case 'PERSONAL': return <AtSign className="h-3 w-3" />
-      case 'GENERIC': return <Mail className="h-3 w-3" />
-      default: return <Mail className="h-3 w-3" />
-    }
+  // Job Card Component
+  const JobCard = ({ job, showRelevanceScore = false }: { job: DiscoveredJob, showRelevanceScore?: boolean }) => {
+    const contactEmail = getContactEmail(job)
+    const cleanSalary = formatSalary(job.salary)
+    
+    return (
+      <div className="border-2 border-gray-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-lg transition-all">
+        <div className="space-y-4">
+          {/* Job Header */}
+          <div className="flex items-start justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                <h3 className="text-xl font-bold text-gray-900">{job.title}</h3>
+                {contactEmail && (
+                  <Badge className="bg-green-100 text-green-800 hover:bg-green-200">
+                    📧 Contact Available
+                  </Badge>
+                )}
+                {job.remote && (
+                  <Badge variant="outline" className="border-blue-300 text-blue-700">
+                    🏠 Remote
+                  </Badge>
+                )}
+                {showRelevanceScore && (job as any).relevanceScore && (
+                  <Badge className="bg-purple-100 text-purple-800">
+                    {(((job as any).relevanceScore * 100).toFixed(0))}% relevant
+                  </Badge>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-4 text-gray-600">
+                <span className="flex items-center gap-1 font-medium">
+                  <Building className="h-4 w-4" />
+                  {job.company}
+                </span>
+                {job.location && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-4 w-4" />
+                    {job.location}
+                  </span>
+                )}
+                {cleanSalary && (
+                  <span className="flex items-center gap-1">
+                    <DollarSign className="h-4 w-4" />
+                    {cleanSalary}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="text-right space-y-1">
+              <Badge variant="secondary" className="text-xs">
+                {job.source?.toUpperCase() || 'REDDIT'}
+              </Badge>
+              {job.postedAt && (
+                <div className="text-xs text-gray-500">
+                  📅 {formatPostingDate(job.postedAt)}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Contact Email Section */}
+          {contactEmail && (
+            <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-green-800">✉️ Direct Contact Found</p>
+                  <p className="text-green-700 font-mono text-lg">{contactEmail}</p>
+                  <p className="text-green-600 text-sm">Copy this email for direct outreach to the hiring manager</p>
+                </div>
+                <Button
+                  onClick={() => copyToClipboard(contactEmail, 'Email address')}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy Email
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Job Metadata */}
+          <div className="flex items-center gap-6 text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
+            {job.redditMetadata && (
+              <>
+                <span className="font-medium">r/{job.redditMetadata.subreddit}</span>
+                <span>👆 {job.redditMetadata.ups} upvotes</span>
+                <span>💬 {job.redditMetadata.comments} comments</span>
+                <span>👤 u/{job.redditMetadata.author}</span>
+              </>
+            )}
+            {job.postedAt && (
+              <span className="ml-auto font-medium text-blue-600">
+                📅 {(() => {
+                  const date = new Date(job.postedAt)
+                  const now = new Date()
+                  const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
+                  const diffInDays = Math.floor(diffInHours / 24)
+                  
+                  if (diffInHours < 1) return '🔥 Just posted'
+                  if (diffInHours < 24) return `🔥 ${diffInHours}h ago`
+                  if (diffInDays === 1) return 'Yesterday'
+                  if (diffInDays < 7) return `${diffInDays} days ago`
+                  return date.toLocaleDateString()
+                })()}
+              </span>
+            )}
+          </div>
+
+          {/* Job Description Preview */}
+          {job.description && (
+            <div className="border-t pt-4">
+              <p className="text-gray-600 text-sm leading-relaxed">
+                {job.description.length > 300 
+                  ? `${job.description.substring(0, 300)}...` 
+                  : job.description
+                }
+              </p>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3 pt-2">
+            {job.url && (
+              <Button variant="outline" asChild>
+                <a href={job.url} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  View Original Post
+                </a>
+              </Button>
+            )}
+            
+            {!contactEmail && (
+              <div className="text-sm text-gray-500 italic">
+                No direct contact found - consider reaching out via the original post
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Job Discovery</h1>
-          <p className="text-muted-foreground">
-            Discover, manage, and apply to your dream jobs with AI assistance
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Dialog open={isDiscoverDialogOpen} onOpenChange={setIsDiscoverDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Search className="mr-2 h-4 w-4" />
-                Discover Jobs
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Discover New Jobs</DialogTitle>
-                <DialogDescription>
-                  Use AI to find job opportunities across multiple platforms
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="keywords">Keywords</Label>
-                  <Input
-                    id="keywords"
-                    placeholder="e.g., React Developer, Product Manager"
-                    value={discoverParams.keywords.join(', ')}
-                    onChange={(e) => setDiscoverParams({
-                      ...discoverParams,
-                      keywords: e.target.value.split(',').map(k => k.trim())
-                    })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="location">Location (Optional)</Label>
-                  <Input
-                    id="location"
-                    placeholder="e.g., San Francisco, Remote"
-                    value={discoverParams.location}
-                    onChange={(e) => setDiscoverParams({
-                      ...discoverParams,
-                      location: e.target.value
-                    })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="limit">Maximum Jobs</Label>
-                  <Select 
-                    value={discoverParams.limit.toString()} 
-                    onValueChange={(value) => setDiscoverParams({
-                      ...discoverParams,
-                      limit: parseInt(value)
-                    })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="20">20 jobs</SelectItem>
-                      <SelectItem value="50">50 jobs</SelectItem>
-                      <SelectItem value="100">100 jobs</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="submit" onClick={discoverJobs}>
-                  <Search className="mr-2 h-4 w-4" />
-                  Start Discovery
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Job
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Add Job Manually</DialogTitle>
-                <DialogDescription>
-                  Add a job opportunity you found manually
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="title">Job Title *</Label>
-                    <Input
-                      id="title"
-                      placeholder="Senior Developer"
-                      value={newJob.title}
-                      onChange={(e) => setNewJob({ ...newJob, title: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="company">Company *</Label>
-                    <Input
-                      id="company"
-                      placeholder="Acme Inc"
-                      value={newJob.company}
-                      onChange={(e) => setNewJob({ ...newJob, company: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="location">Location</Label>
-                    <Input
-                      id="location"
-                      placeholder="San Francisco, CA"
-                      value={newJob.location}
-                      onChange={(e) => setNewJob({ ...newJob, location: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="salary">Salary</Label>
-                    <Input
-                      id="salary"
-                      placeholder="$120k-$150k"
-                      value={newJob.salary}
-                      onChange={(e) => setNewJob({ ...newJob, salary: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="url">Job URL</Label>
-                  <Input
-                    id="url"
-                    placeholder="https://..."
-                    value={newJob.url}
-                    onChange={(e) => setNewJob({ ...newJob, url: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="contactEmail">Contact Email</Label>
-                  <Input
-                    id="contactEmail"
-                    placeholder="hr@company.com"
-                    value={newJob.contactEmail}
-                    onChange={(e) => setNewJob({ ...newJob, contactEmail: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Job description..."
-                    value={newJob.description}
-                    onChange={(e) => setNewJob({ ...newJob, description: e.target.value })}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="submit" onClick={createJob}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Job
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+      <div className="text-center space-y-2">
+        <h1 className="text-4xl font-bold">🚀 Job Discovery Engine</h1>
+        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          Find job opportunities with direct hiring manager contacts. No job boards, no applications forms - just direct outreach.
+        </p>
       </div>
 
-      {/* Statistics */}
-      {stats && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      {/* Search Section */}
+      <Card className="max-w-4xl mx-auto">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-blue-500" />
+            Search for Opportunities
+          </CardTitle>
+          <CardDescription>
+            Enter your target job title and we'll find fresh opportunities with contact information
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Job Title *</label>
+              <Input
+                placeholder="e.g. Frontend Developer"
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                className="w-full"
+                disabled={loading}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Location</label>
+              <Input
+                placeholder="e.g. San Francisco"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="w-full"
+                disabled={loading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">🎯 Search Mode</label>
+              <select 
+                value={searchMode} 
+                onChange={(e) => setSearchMode(e.target.value as 'strict' | 'moderate' | 'loose')}
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background"
+                disabled={loading}
+              >
+                <option value="strict">🎯 Strict (Exact matches)</option>
+                <option value="moderate">⚖️ Moderate (Balanced)</option>
+                <option value="loose">🔍 Loose (Broad discovery)</option>
+              </select>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Platform</label>
+              <select 
+                value={source} 
+                onChange={(e) => setSource(e.target.value)}
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background"
+                disabled={loading}
+              >
+                <option value="reddit">🔴 Reddit (Best Results)</option>
+                <option value="twitter">🐦 Twitter</option>
+                <option value="linkedin">💼 LinkedIn</option>
+              </select>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="invisible">Search</label>
+              <Button 
+                onClick={discoverJobs} 
+                disabled={loading || !jobTitle.trim()}
+                className="w-full h-10"
+                size="default"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Searching...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4 mr-2" />
+                    Find Jobs
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+          
+          {/* Advanced Filters */}
+          <div className="space-y-4 pt-4 border-t">
+            <h4 className="text-sm font-medium text-gray-700">🎯 Smart Filters</h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Date Range Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">📅 Maximum Age</label>
+                <select 
+                  value={maxDaysOld} 
+                  onChange={(e) => setMaxDaysOld(Number(e.target.value))}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background"
+                  disabled={loading}
+                >
+                  <option value={1}>Today only</option>
+                  <option value={3}>Last 3 days</option>
+                  <option value={7}>Last week (Default)</option>
+                  <option value={14}>Last 2 weeks</option>
+                  <option value={30}>Last month</option>
+                </select>
+              </div>
+
+              {/* Post Type Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">🏢 Post Type</label>
+                <select 
+                  value={onlyHiring ? 'hiring' : 'all'} 
+                  onChange={(e) => setOnlyHiring(e.target.value === 'hiring')}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background"
+                  disabled={loading}
+                >
+                  <option value="hiring">Hiring posts only (Recommended)</option>
+                  <option value="all">All posts (including freelancers)</option>
+                </select>
+              </div>
+
+              {/* Remote Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">🌍 Work Type</label>
+                <div className="flex items-center space-x-2 h-10">
+                  <input
+                    type="checkbox"
+                    id="remoteOnly"
+                    checked={remoteOnly}
+                    onChange={(e) => setRemoteOnly(e.target.checked)}
+                    className="rounded"
+                    disabled={loading}
+                  />
+                  <label htmlFor="remoteOnly" className="text-sm">
+                    Remote jobs only
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Summary */}
+            <div className="text-xs text-muted-foreground bg-gray-50 p-3 rounded-lg">
+              <span className="font-medium">Active filters:</span> 
+              <span className="ml-1">
+                {searchMode === 'strict' && '🎯 Strict mode (exact matches only)'}
+                {searchMode === 'moderate' && '⚖️ Moderate mode (balanced approach)'}
+                {searchMode === 'loose' && '🔍 Loose mode (broad discovery)'}
+                 • Jobs posted within {maxDaysOld === 1 ? 'today' : `${maxDaysOld} days`}
+                {onlyHiring && ' • Only companies hiring (excludes freelancer posts)'}
+                {remoteOnly && ' • Remote positions only'}
+              </span>
+            </div>
+          </div>
+
+          {/* Search Mode Info Panel */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h4 className="text-sm font-medium text-blue-900 mb-2">🎯 Search Mode Guide</h4>
+            <div className="text-xs text-blue-700 space-y-1">
+              {searchMode === 'strict' && (
+                <div>
+                  <span className="font-medium">🎯 Strict Mode:</span> Only shows jobs with exact keyword matches. 
+                  Best for specific role hunting with zero false positives. Requires 80% relevance.
+                </div>
+              )}
+              {searchMode === 'moderate' && (
+                <div>
+                  <span className="font-medium">⚖️ Moderate Mode:</span> Includes synonyms and related terms (e.g., "js" for "javascript"). 
+                  Balanced approach perfect for general job searching. Requires 40% relevance.
+                </div>
+              )}
+              {searchMode === 'loose' && (
+                <div>
+                  <span className="font-medium">🔍 Loose Mode:</span> Broad discovery including category matches and variations. 
+                  Great for exploring opportunities and finding hidden gems. Requires 20% relevance.
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Real-time Scraping Progress */}
+      {showProgress && scrapingProgress && (
+        <Card className="max-w-4xl mx-auto border-blue-200 bg-blue-50">
+          <CardContent className="py-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-blue-900">
+                  {scrapingProgress.message}
+                </h3>
+                <span className="text-sm text-blue-700">
+                  Stage {scrapingProgress.currentStep}/{scrapingProgress.totalSteps}
+                </span>
+              </div>
+              
+              <Progress 
+                value={scrapingProgress.progress} 
+                className="w-full h-3"
+              />
+              
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-blue-600">{scrapingProgress.details}</span>
+                <span className="text-blue-700 font-medium">
+                  {scrapingProgress.progress}%
+                </span>
+              </div>
+
+              {/* Progress Icons */}
+              <div className="flex items-center justify-center gap-4 mt-4">
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
+                  scrapingProgress.progress >= 20 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  <Wifi className="h-3 w-3" />
+                  Connect
+                </div>
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
+                  scrapingProgress.progress >= 50 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  <Filter className="h-3 w-3" />
+                  Filter
+                </div>
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
+                  scrapingProgress.progress >= 70 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  <Mail className="h-3 w-3" />
+                  Extract
+                </div>
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
+                  scrapingProgress.progress >= 100 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  <CheckCircle className="h-3 w-3" />
+                  Complete
+                </div>
+              </div>
+
+              {/* Live Connection Status */}
+              <div className="flex items-center justify-center gap-2 text-xs text-blue-600 bg-blue-100 rounded-full py-2 px-4">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span>Live connection to backend scraper • Session: {sessionIdRef.current.slice(-8)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Debug Info (Remove in production) */}
+      {process.env.NODE_ENV === 'development' && (
+        <Card className="max-w-4xl mx-auto border-yellow-200 bg-yellow-50">
+          <CardContent className="py-4">
+            <h4 className="font-medium text-yellow-800 mb-2">🔧 Debug Info</h4>
+            <div className="text-sm text-yellow-700 space-y-1">
+              <p>Jobs found: {discoveredJobs.length}</p>
+              <p>Backend endpoint: {source === 'reddit' ? '/api/scraper/test-reddit' : '/api/scraper/test-discover'}</p>
+              <p>Search params: {JSON.stringify({ jobTitle, location, source, remoteOnly, maxDaysOld, onlyHiring, searchMode })}</p>
+              <p>Session ID: {sessionIdRef.current}</p>
+              <p>SSE Status: {eventSourceRef.current ? 'Connected' : 'Disconnected'}</p>
+              {searchResults && (
+                <p>API response keys: {Object.keys(searchResults).join(', ')}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Results with Tabs */}
+      {discoveredJobs.length > 0 && (
+        <div className="max-w-6xl mx-auto">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Jobs</CardTitle>
-              <Target className="h-4 w-4 text-muted-foreground" />
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-green-500" />
+                  Search Results Analysis
+                </span>
+                {searchResults?.analysis && (
+                  <div className="text-sm text-muted-foreground">
+                    {searchResults.analysis.contactRate} with direct contacts
+                  </div>
+                )}
+              </CardTitle>
+              <CardDescription>
+                Compare results at each stage of the filtering process
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.jobs.total}</div>
-              <p className="text-xs text-muted-foreground">
-                +{stats.jobs.recentlyDiscovered} this week
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Applications</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.jobs.applied}</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.insights.applicationRate} application rate
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Discovered</CardTitle>
-              <Eye className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.jobs.discovered}</div>
-              <p className="text-xs text-muted-foreground">Ready for review</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Activity</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.insights.activityLevel}</div>
-              <p className="text-xs text-muted-foreground">This week</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.applications.pending}</div>
-              <p className="text-xs text-muted-foreground">Awaiting response</p>
+              <Tabs defaultValue="filtered" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="filtered" className="text-sm">
+                    Final Results ({searchResults?.resultSets?.jobsAfterFiltering?.count || discoveredJobs.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="jobs" className="text-sm">
+                    Jobs Found ({searchResults?.resultSets?.jobsFound?.count || 'N/A'})
+                  </TabsTrigger>
+                  <TabsTrigger value="total" className="text-sm">
+                    Total Posts ({searchResults?.resultSets?.totalFound?.count || 'N/A'})
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Tab 1: Final Filtered Results (Current View) */}
+                <TabsContent value="filtered" className="space-y-4 mt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">📋 Final Filtered Results</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {searchResults?.resultSets?.jobsAfterFiltering?.description || 'Jobs after all filters applied'}
+                      </p>
+                    </div>
+                    <Badge className="bg-green-100 text-green-800">
+                      {discoveredJobs.length} jobs
+                    </Badge>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    {discoveredJobs.map((job, index) => (
+                      <JobCard key={`filtered-${job.id}-${index}`} job={job} />
+                    ))}
+                  </div>
+                </TabsContent>
+
+                {/* Tab 2: All Jobs Found (Before Final Filtering) */}
+                <TabsContent value="jobs" className="space-y-4 mt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">🎯 All Jobs Identified</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {searchResults?.resultSets?.jobsFound?.description || 'All posts identified as job opportunities (before relevance filtering)'}
+                      </p>
+                    </div>
+                    <Badge className="bg-blue-100 text-blue-800">
+                      {searchResults?.resultSets?.jobsFound?.count || 0} jobs
+                    </Badge>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    {searchResults?.resultSets?.jobsFound?.data?.map((job: any, index: number) => (
+                      <JobCard key={`jobs-${job.id}-${index}`} job={job} showRelevanceScore={true} />
+                    )) || (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No job data available for this tab
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Tab 3: Total Posts Found (Raw Reddit Posts) */}
+                <TabsContent value="total" className="space-y-4 mt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">🌐 Total Posts Found</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {searchResults?.resultSets?.totalFound?.description || 'Raw posts found from Reddit (before job identification)'}
+                      </p>
+                    </div>
+                    <Badge className="bg-purple-100 text-purple-800">
+                      {searchResults?.resultSets?.totalFound?.count || 0} posts
+                    </Badge>
+                  </div>
+                  
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                    <p className="text-sm text-yellow-800">
+                      <strong>Note:</strong> This tab shows the raw count of posts found from Reddit. 
+                      These posts are then analyzed to identify job opportunities and filtered for relevance.
+                    </p>
+                  </div>
+                  
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <div className="p-4 border rounded-lg">
+                      <h4 className="font-medium mb-2">Search Coverage</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Total Reddit posts found: {searchResults?.resultSets?.totalFound?.count || 0}
+                      </p>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <h4 className="font-medium mb-2">Job Identification Rate</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {searchResults?.resultSets?.totalFound?.count > 0 
+                          ? `${((searchResults?.resultSets?.jobsFound?.count / searchResults?.resultSets?.totalFound?.count) * 100).toFixed(1)}%`
+                          : '0%'
+                        } of posts identified as jobs
+                      </p>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <h4 className="font-medium mb-2">Final Filter Rate</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {searchResults?.resultSets?.jobsFound?.count > 0 
+                          ? `${((searchResults?.resultSets?.jobsAfterFiltering?.count / searchResults?.resultSets?.jobsFound?.count) * 100).toFixed(1)}%`
+                          : '0%'
+                        } passed final filters
+                      </p>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters & Search</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <Input
-                placeholder="Search jobs..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="DISCOVERED">Discovered</SelectItem>
-                <SelectItem value="FILTERED">Filtered</SelectItem>
-                <SelectItem value="APPLIED">Applied</SelectItem>
-                <SelectItem value="REJECTED">Rejected</SelectItem>
-                <SelectItem value="ARCHIVED">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                <SelectItem value="TWITTER">Twitter</SelectItem>
-                <SelectItem value="REDDIT">Reddit</SelectItem>
-                <SelectItem value="LINKEDIN">LinkedIn</SelectItem>
-                <SelectItem value="GOOGLE">Google</SelectItem>
-                <SelectItem value="MANUAL">Manual</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="createdAt">Date Added</SelectItem>
-                <SelectItem value="relevanceScore">Relevance</SelectItem>
-                <SelectItem value="title">Job Title</SelectItem>
-                <SelectItem value="company">Company</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Jobs List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Job Opportunities</CardTitle>
-          <CardDescription>
-            {jobs.length} jobs found. Manage your job hunt pipeline effectively.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          ) : jobs.length === 0 ? (
-            <div className="text-center py-12">
-              <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No jobs found</h3>
-              <p className="text-muted-foreground mb-4">
-                Start by discovering jobs or add them manually
-              </p>
-              <Button onClick={() => setIsDiscoverDialogOpen(true)}>
-                <Search className="mr-2 h-4 w-4" />
-                Discover Jobs
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {jobs.map((job) => (
-                <div 
-                  key={job.id} 
-                  className="border rounded-lg p-6 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold text-lg">{job.title}</h3>
-                        <Badge variant="outline" className={getStatusColor(job.status)}>
-                          <span className="flex items-center gap-1">
-                            {getStatusIcon(job.status)}
-                            {job.status}
-                          </span>
-                        </Badge>
-                        <Badge variant="secondary">{job.source}</Badge>
-                      </div>
-                      
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-                        <span className="flex items-center gap-1">
-                          <Building className="h-4 w-4" />
-                          {job.company}
-                        </span>
-                        {job.location && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            {job.location}
-                          </span>
-                        )}
-                        {job.salary && (
-                          <span className="flex items-center gap-1">
-                            <DollarSign className="h-4 w-4" />
-                            {job.salary}
-                          </span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          {new Date(job.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-
-                      {job.description && (
-                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                          {job.description}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-2">
-                        {job.contacts.length > 0 && (
-                          <Badge variant="outline" className="text-green-600">
-                            <Mail className="h-3 w-3 mr-1" />
-                            Contact Available
-                          </Badge>
-                        )}
-                        {job.relevanceScore > 0.7 && (
-                          <Badge variant="outline" className="text-blue-600">
-                            <Target className="h-3 w-3 mr-1" />
-                            High Match
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 ml-4">
-                      {/* Email Discovery Button */}
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => discoverEmailsForJob(job)}
-                        disabled={isDiscoveringEmails.has(job.id)}
-                      >
-                        {isDiscoveringEmails.has(job.id) ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                        ) : (
-                          <AtSign className="h-4 w-4 mr-1" />
-                        )}
-                        {isDiscoveringEmails.has(job.id) ? 'Finding...' : 'Find Emails'}
-                      </Button>
-
-                      {/* View Contacts Button */}
-                      {job.contacts.length > 0 && (
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => viewContacts(job)}
-                        >
-                          <User className="h-4 w-4 mr-1" />
-                          Contacts ({job.contacts.length})
-                        </Button>
-                      )}
-
-                      {job.url && (
-                        <Button variant="ghost" size="sm" asChild>
-                          <a href={job.url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        </Button>
-                      )}
-                      
-                      <Select 
-                        value={job.status} 
-                        onValueChange={(value) => updateJobStatus(job.id, value)}
-                      >
-                        <SelectTrigger className="w-[140px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="DISCOVERED">Discovered</SelectItem>
-                          <SelectItem value="FILTERED">Filtered</SelectItem>
-                          <SelectItem value="APPLIED">Applied</SelectItem>
-                          <SelectItem value="REJECTED">Rejected</SelectItem>
-                          <SelectItem value="ARCHIVED">Archived</SelectItem>
-                        </SelectContent>
-                      </Select>
-
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => deleteJob(job.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Email Discovery Progress Dialog */}
-      <Dialog open={isEmailDiscoveryOpen} onOpenChange={setIsEmailDiscoveryOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Email Discovery in Progress</DialogTitle>
-            <DialogDescription>
-              Finding email contacts for {emailDiscoveryJob?.company}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {emailDiscoveryProgress && (
-              <>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>{emailDiscoveryProgress.stage}</span>
-                    <span>{emailDiscoveryProgress.completedSteps}/{emailDiscoveryProgress.totalSteps}</span>
-                  </div>
-                  <Progress value={emailDiscoveryProgress.progress} className="h-2" />
-                  <p className="text-sm text-muted-foreground">
-                    {emailDiscoveryProgress.message}
-                  </p>
-                </div>
-                {emailDiscoveryProgress.stage === 'Complete' && (
-                  <div className="flex items-center gap-2 text-green-600">
-                    <CheckCircle className="h-4 w-4" />
-                    <span className="text-sm font-medium">Discovery completed successfully!</span>
-                  </div>
-                )}
-                {emailDiscoveryProgress.stage === 'Error' && (
-                  <div className="flex items-center gap-2 text-red-600">
-                    <AlertCircle className="h-4 w-4" />
-                    <span className="text-sm font-medium">Discovery failed</span>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Contact Viewing Dialog */}
-      <Dialog open={isContactViewOpen} onOpenChange={setIsContactViewOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Email Contacts</DialogTitle>
-            <DialogDescription>
-              Found contacts for {contactViewJob?.company} - {contactViewJob?.title}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 max-h-96 overflow-y-auto">
-            {contactViewJob?.contacts.map((contact, index) => (
-              <div key={contact.id || index} className="border rounded-lg p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-medium">{contact.email}</span>
-                      {contact.verified && (
-                        <Badge variant="outline" className="text-green-600">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Verified
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-2 mb-2">
-                      {contact.priority && (
-                        <Badge variant="outline" className={getPriorityColor(contact.priority)}>
-                          {contact.priority} Priority
-                        </Badge>
-                      )}
-                      {contact.type && (
-                        <Badge variant="outline" className="flex items-center gap-1">
-                          {getTypeIcon(contact.type)}
-                          {contact.type}
-                        </Badge>
-                      )}
-                    </div>
-
-                    {contact.name && (
-                      <p className="text-sm text-muted-foreground mb-1">
-                        <User className="h-3 w-3 inline mr-1" />
-                        {contact.name}
-                      </p>
-                    )}
-                    
-                    {contact.source && (
-                      <p className="text-sm text-muted-foreground mb-1">
-                        <Search className="h-3 w-3 inline mr-1" />
-                        Found via: {contact.source}
-                      </p>
-                    )}
-
-                    {contact.discoveredAt && (
-                      <p className="text-sm text-muted-foreground">
-                        <Clock className="h-3 w-3 inline mr-1" />
-                        Discovered: {new Date(contact.discoveredAt).toLocaleDateString()}
-                      </p>
-                    )}
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(contact.email)}
-                  >
-                    <Copy className="h-3 w-3 mr-1" />
-                    Copy
-                  </Button>
-                </div>
+      {/* Empty State */}
+      {!loading && !showProgress && discoveredJobs.length === 0 && (
+        <Card className="max-w-2xl mx-auto">
+          <CardContent className="py-12 text-center space-y-4">
+            <div className="flex justify-center">
+              <div className="p-4 bg-blue-50 rounded-full">
+                <Search className="h-12 w-12 text-blue-500" />
               </div>
-            ))}
-            
-            {(!contactViewJob?.contacts || contactViewJob.contacts.length === 0) && (
-              <div className="text-center py-8">
-                <Mail className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No contacts found for this job</p>
-                <Button 
-                  variant="outline" 
-                  className="mt-2"
-                  onClick={() => contactViewJob && discoverEmailsForJob(contactViewJob)}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Try Discovery
-                </Button>
+            </div>
+            <h3 className="text-2xl font-semibold">Ready to Find Your Next Job?</h3>
+            <p className="text-gray-600 max-w-md mx-auto">
+              Enter a job title above to discover opportunities with direct hiring manager contacts. 
+              We'll search across Reddit, Twitter, and LinkedIn for the freshest postings.
+            </p>
+            <div className="flex justify-center gap-6 text-sm text-gray-500 pt-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <span>Direct emails discovered</span>
               </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsContactViewOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <span>No job board limitations</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <span>Fresh opportunities daily</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 } 

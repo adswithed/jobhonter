@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import { format, subDays } from 'date-fns';
+import puppeteer, { Browser, Page } from 'puppeteer';
 import {
   SearchParams,
   ScraperResult,
@@ -12,6 +13,7 @@ import { BaseScraper } from '../base/BaseScraper';
 
 export class TwitterScraper extends BaseScraper {
   private httpClient: AxiosInstance;
+  private browser: Browser | null = null;
 
   constructor() {
     super(
@@ -41,19 +43,35 @@ export class TwitterScraper extends BaseScraper {
     let totalFound = 0;
 
     try {
-      this.logger.info('Starting Twitter job scraping', { params });
+      this.logger.info('Starting direct Twitter job scraping with Puppeteer', { params });
+
+      // Initialize Puppeteer browser
+      if (!this.browser) {
+        this.browser = await puppeteer.launch({
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
+          ]
+        });
+      }
 
       // Build search queries
       const queries = this.buildSearchQueries(params);
       
       for (const query of queries) {
         try {
-          const searchResults = await this.searchTwitter(query, params);
+          const searchResults = await this.searchTwitterDirect(query, params);
           jobs.push(...searchResults.jobs);
           totalFound += searchResults.totalFound;
           
           // Add delay between queries to be respectful
-          await this.createDelay(2000);
+          await this.createDelay(3000);
         } catch (error) {
           const errorMsg = `Failed to search query "${query}": ${error instanceof Error ? error.message : 'Unknown error'}`;
           errors.push(errorMsg);
@@ -109,85 +127,152 @@ export class TwitterScraper extends BaseScraper {
 
     // Create queries for each keyword combination
     for (const keyword of keywords) {
-      // Basic job search
-      queries.push(`"${keyword}" (hiring OR job OR opportunity)${locationFilter}${dateFilter} -retweet`);
+      // Basic job search (with -retweet to exclude retweets as you asked)
+      queries.push(`"${keyword}" (hiring OR job OR opportunity)${locationFilter}${dateFilter} -is:retweet`);
       
       // Remote-specific search if remote is requested
       if (params.remote) {
-        queries.push(`"${keyword}" remote (hiring OR job)${dateFilter} -retweet`);
+        queries.push(`"${keyword}" remote (hiring OR job)${dateFilter} -is:retweet`);
       }
     }
 
     // Add location-specific queries if location is provided
     if (params.location) {
-      queries.push(`"hiring" "${params.location}" (developer OR engineer OR programmer)${dateFilter} -retweet`);
+      queries.push(`"hiring" "${params.location}" (developer OR engineer OR programmer)${dateFilter} -is:retweet`);
     }
 
-    return queries.slice(0, 10); // Limit to 10 queries to avoid rate limits
+    return queries.slice(0, 5); // Limit to 5 queries to avoid rate limits
   }
 
-  private async searchTwitter(query: string, params: SearchParams): Promise<{ jobs: Job[]; totalFound: number }> {
+  private async searchTwitterDirect(query: string, params: SearchParams): Promise<{ jobs: Job[]; totalFound: number }> {
     const jobs: Job[] = [];
+    let page: Page | null = null;
     
     try {
-      // Use Nitter (open-source Twitter frontend) for scraping
-      // This is more reliable and respects rate limits better
-      const nitterInstances = [
-        'https://nitter.net',
-        'https://nitter.it',
-        'https://nitter.fdn.fr'
-      ];
-
-      let response;
-      let lastError;
-
-      // Try different Nitter instances
-      for (const instance of nitterInstances) {
-        try {
-          const searchUrl = `${instance}/search?q=${encodeURIComponent(query)}&f=tweets`;
-          response = await this.httpClient.get(searchUrl);
-          break;
-        } catch (error) {
-          lastError = error;
-          this.logger.warn(`Nitter instance ${instance} failed, trying next...`);
-          continue;
-        }
-      }
-
-      if (!response) {
-        throw lastError || new Error('All Nitter instances failed');
-      }
-
-      const $ = cheerio.load(response.data);
+      console.log(`🔍 Searching Twitter directly with query: "${query}"`);
       
-      // Parse tweets from Nitter HTML
-      $('.timeline-item').each((_, element) => {
-        try {
-          const job = this.parseTweetElement($, element, query);
-          if (job) {
-            jobs.push(job);
-          }
-        } catch (error) {
-          this.logger.debug('Failed to parse tweet element', { error });
-        }
+      if (!this.browser) {
+        throw new Error('Browser not initialized');
+      }
+
+      page = await this.browser.newPage();
+      
+      // Set user agent and viewport
+      await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      await page.setViewport({ width: 1366, height: 768 });
+
+      // Navigate to Twitter search
+      const searchUrl = `https://twitter.com/search?q=${encodeURIComponent(query)}&src=typed_query&f=live`;
+      console.log(`🌐 Navigating to: ${searchUrl}`);
+      
+      await page.goto(searchUrl, { 
+        waitUntil: 'networkidle2',
+        timeout: 30000 
       });
 
+      // Wait for tweets to load
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Debug: Take a screenshot and save HTML to see what we're getting
+      await page.screenshot({ path: '/tmp/twitter-debug.png', fullPage: true });
+      const html = await page.content();
+      console.log('📄 Page HTML length:', html.length);
+      console.log('📄 Page title:', await page.title());
+      
+      // Check if we're being asked to log in
+      const loginRequired = await page.$('input[name="text"]') || await page.$('input[autocomplete="username"]');
+      if (loginRequired) {
+        console.log('🚫 Twitter is requiring login - this is why we get 0 tweets');
+      }
+
+      // Extract tweets
+      const tweets = await page.evaluate(() => {
+        const tweetElements = document.querySelectorAll('[data-testid="tweet"]');
+        console.log(`Found ${tweetElements.length} tweet elements`);
+        
+        // Debug: Log the page content to see what we're getting
+        if (tweetElements.length === 0) {
+          console.log('No tweets found. Page title:', document.title);
+          console.log('Page URL:', window.location.href);
+          const body = document.body.innerText;
+          console.log('Page content preview:', body.substring(0, 500));
+        }
+        
+        return Array.from(tweetElements).map((tweet, index) => {
+          try {
+            // Extract tweet text
+            const tweetTextElement = tweet.querySelector('[data-testid="tweetText"]');
+            const tweetText = tweetTextElement ? tweetTextElement.textContent || '' : '';
+            
+            // Extract author info
+            const userNameElement = tweet.querySelector('[data-testid="User-Name"]');
+            const userName = userNameElement ? userNameElement.textContent || '' : '';
+            
+            // Extract tweet link
+            const timeElement = tweet.querySelector('time');
+            const tweetLink = timeElement ? timeElement.closest('a')?.href || '' : '';
+            
+            // Extract timestamp
+            const timestamp = timeElement ? timeElement.getAttribute('datetime') || '' : '';
+
+            console.log(`Tweet ${index}: ${tweetText.substring(0, 100)}...`);
+
+            return {
+              text: tweetText,
+              author: userName,
+              link: tweetLink,
+              timestamp: timestamp,
+              index: index
+            };
+          } catch (error) {
+            console.error(`Error parsing tweet ${index}:`, error);
+            return null;
+          }
+        }).filter(tweet => tweet !== null);
+      });
+
+      console.log(`📊 Extracted ${tweets.length} tweets from Twitter`);
+
+      // Process each tweet for job content
+      for (const tweet of tweets) {
+        try {
+          if (!tweet || !tweet.text || !tweet.author || !tweet.link) {
+            console.log('Skipping tweet: missing required fields');
+            continue;
+          }
+
+          console.log(`🔍 Analyzing tweet: "${tweet.text.substring(0, 100)}..."`);
+          
+          const job = this.parseTweetForJob(tweet, query);
+          if (job) {
+            jobs.push(job);
+            console.log(`✅ Found job: ${job.title} at ${job.company}`);
+          } else {
+            console.log(`❌ Tweet not job-related or missing info`);
+          }
+        } catch (error) {
+          console.error('Error processing tweet:', error);
+        }
+      }
+
+      console.log(`🎯 Final result: ${jobs.length} jobs found from ${tweets.length} tweets`);
       return { jobs, totalFound: jobs.length };
 
     } catch (error) {
-      this.logger.error('Twitter search failed', { query, error });
+      console.error('❌ Direct Twitter search failed:', error);
       throw error;
+    } finally {
+      if (page) {
+        await page.close();
+      }
     }
   }
 
-  private parseTweetElement($: cheerio.CheerioAPI, element: any, query: string): Job | null {
-    const $tweet = $(element);
-    
-    // Extract tweet content
-    const tweetText = $tweet.find('.tweet-content').text().trim();
-    const username = $tweet.find('.username').text().replace('@', '');
-    const fullName = $tweet.find('.fullname').text().trim();
-    const tweetLink = $tweet.find('.tweet-link').attr('href');
+  private parseTweetForJob(tweet: any, query: string): Job | null {
+    const tweetText = tweet.text;
+    const username = tweet.author.split('\n')[0]; // Get username (first line)
+    const fullName = tweet.author.split('\n')[1] || username; // Get display name (second line)
+    const tweetLink = tweet.link;
     
     if (!tweetText || !username || !tweetLink) {
       return null;
@@ -201,32 +286,37 @@ export class TwitterScraper extends BaseScraper {
     // Extract job information
     const jobInfo = this.extractJobInfo(tweetText);
     
-    if (!jobInfo.title || !jobInfo.company) {
-      return null;
+    // Set defaults if extraction failed
+    if (!jobInfo.title) {
+      jobInfo.title = this.extractTitleFromKeywords(tweetText, query);
+    }
+    
+    if (!jobInfo.company) {
+      jobInfo.company = fullName || username;
     }
 
-    // Construct full URL
-    const fullUrl = tweetLink.startsWith('http') ? tweetLink : `https://twitter.com${tweetLink}`;
+    // Ensure we have a title (required field)
+    const finalTitle = jobInfo.title || 'Software Developer';
+    const finalCompany = jobInfo.company || fullName || username;
 
-    // Extract posting date
-    const dateStr = $tweet.find('.tweet-date').attr('title');
-    const postedAt = dateStr ? new Date(dateStr) : new Date();
+    // Parse posting date
+    const postedAt = tweet.timestamp ? new Date(tweet.timestamp) : new Date();
 
     const job: Job = {
       id: this.generateJobId({
-        title: jobInfo.title,
-        company: jobInfo.company,
-        url: fullUrl
+        title: finalTitle,
+        company: finalCompany,
+        url: tweetLink
       }),
-      title: jobInfo.title,
-      company: jobInfo.company || fullName || username,
+      title: finalTitle,
+      company: finalCompany,
       location: jobInfo.location,
       description: tweetText,
       requirements: jobInfo.requirements,
       salary: jobInfo.salary,
       jobType: jobInfo.jobType,
       remote: jobInfo.remote || this.isRemoteJob(tweetText, jobInfo.location || ''),
-      url: fullUrl,
+      url: tweetLink,
       source: 'twitter',
       contact: {
         name: fullName || username,
@@ -241,12 +331,36 @@ export class TwitterScraper extends BaseScraper {
           tweetText,
           username,
           fullName,
-          query
+          query,
+          originalTweet: tweet
         }
       }
     };
 
     return job;
+  }
+
+  private extractTitleFromKeywords(text: string, query: string): string {
+    // Extract job title from search keywords
+    const queryWords = query.toLowerCase().split(' ');
+    const jobTitleWords = queryWords.filter(word => 
+      ['developer', 'engineer', 'programmer', 'designer', 'manager', 'analyst', 'specialist'].includes(word)
+    );
+    
+    if (jobTitleWords.length > 0) {
+      return jobTitleWords.join(' ').replace(/"/g, '');
+    }
+    
+    // Fallback to generic title
+    return 'Software Developer';
+  }
+
+  // Clean up browser when done
+  async destroy(): Promise<void> {
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
+    }
   }
 
   private isJobRelated(text: string): boolean {
@@ -257,7 +371,15 @@ export class TwitterScraper extends BaseScraper {
     ];
 
     const textLower = text.toLowerCase();
-    return jobKeywords.some(keyword => textLower.includes(keyword));
+    const foundKeywords = jobKeywords.filter(keyword => textLower.includes(keyword));
+    
+    console.log(`Job detection for: "${text.substring(0, 100)}..."`);
+    console.log(`Found keywords: [${foundKeywords.join(', ')}]`);
+    
+    const isJobRelated = foundKeywords.length > 0;
+    console.log(`Is job related: ${isJobRelated}`);
+    
+    return isJobRelated;
   }
 
   private extractJobInfo(text: string): {

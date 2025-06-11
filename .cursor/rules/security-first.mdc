@@ -1,5 +1,7 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
+Every line of code must pass the "Production Security Review" - Is this the most secure, efficient, and maintainable approach possible? If not, refactor until it is.
+This principle will guide every decision I make during development, ensuring we build a robust, scalable, and secure platform that can handle both open-source community needs and enterprise SaaS requirements.

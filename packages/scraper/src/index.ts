@@ -19,6 +19,9 @@ export { createLogger } from './utils/Logger';
 
 // Platform-specific scrapers
 export { TwitterScraper } from './scrapers/TwitterScraper';
+export { GoogleJobsScraper } from './scrapers/GoogleJobsScraper';
+export { RemoteOKScraper } from './scrapers/RemoteOKScraper';
+export { RedditScraper } from './scrapers/RedditScraper';
 
 // Scraper manager (to be implemented)
 // export { ScraperManager } from './manager/ScraperManager';
