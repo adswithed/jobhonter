@@ -1,4 +1,5 @@
 import { getJson } from 'serpapi';
+import axios from 'axios';
 import {
   SearchParams,
   ScraperResult,
@@ -42,27 +43,50 @@ interface SerpApiResponse {
   };
 }
 
+interface GoogleCustomSearchResult {
+  title: string;
+  link: string;
+  snippet: string;
+  displayLink: string;
+}
+
+interface GoogleCustomSearchResponse {
+  items?: GoogleCustomSearchResult[];
+  searchInformation?: {
+    totalResults: string;
+    searchTime: number;
+  };
+}
+
 export class GoogleScraper extends BaseScraper {
   private serpApiKey: string;
+  private googleApiKey: string;
+  private customSearchEngineId: string;
 
   constructor() {
     super(
       'google-scraper',
-      'Google Jobs Scraper (SerpAPI)',
+      'Google Jobs Scraper (SerpAPI + Google Custom Search)',
       'google',
       PlatformConfigs.google
     );
     
-    // Get SerpAPI key from environment
+    // Get API keys from environment
     this.serpApiKey = process.env.SERPAPI_KEY || '';
+    this.googleApiKey = process.env.GOOGLE_API_KEY || process.env.SERPAPI_KEY || '';
+    this.customSearchEngineId = process.env.GOOGLE_CSE_ID || '017576662512468239146:omuauf_lfve'; // Default CSE ID
     
-    if (!this.serpApiKey) {
-      this.logger.warn('⚠️  SERPAPI_KEY not found in environment variables. Google scraper will use fallback mode.');
+    if (!this.serpApiKey && !this.googleApiKey) {
+      this.logger.warn('⚠️  Neither SERPAPI_KEY nor GOOGLE_API_KEY found in environment variables. Google scraper will use fallback mode.');
+    } else if (this.googleApiKey && !this.serpApiKey) {
+      this.logger.info('🔧 Using Google Custom Search API mode');
+    } else if (this.serpApiKey) {
+      this.logger.info('🔧 Using SerpAPI mode');
     }
   }
 
   /**
-   * MAIN SCRAPE METHOD - Google Jobs via SerpAPI
+   * MAIN SCRAPE METHOD - Google Jobs via SerpAPI or Google Custom Search
    */
   protected async performScrape(params: SearchParams): Promise<ScraperResult> {
     const jobs: Job[] = [];
@@ -70,15 +94,15 @@ export class GoogleScraper extends BaseScraper {
     let totalFound = 0;
 
     try {
-      this.logger.info('🚀 Google Jobs scraper (SerpAPI)', { 
+      this.logger.info('🚀 Google Jobs scraper', { 
         keywords: params.keywords,
         location: params.location,
-        approach: 'serpapi-google-jobs'
+        mode: this.serpApiKey ? 'SerpAPI' : this.googleApiKey ? 'Google Custom Search' : 'Fallback'
       });
 
       const startTime = Date.now();
       
-      // Strategy 1: Use Google Jobs API via SerpAPI
+      // Strategy 1: Use SerpAPI if available
       if (this.serpApiKey) {
         for (const keyword of params.keywords.slice(0, 2)) {
           try {
@@ -88,29 +112,45 @@ export class GoogleScraper extends BaseScraper {
             
             if (jobs.length >= (params.limit || 20)) break;
           } catch (error) {
-            this.logger.warn(`Google Jobs search failed for ${keyword}:`, error);
-            errors.push(`Google Jobs search failed for ${keyword}: ${error}`);
+            this.logger.warn(`SerpAPI search failed for ${keyword}:`, error);
+            errors.push(`SerpAPI search failed for ${keyword}: ${error}`);
+          }
+        }
+
+        // SerpAPI Organic Search
+        if (jobs.length < 5) {
+          for (const keyword of params.keywords.slice(0, 1)) {
+            try {
+              this.logger.info(`🔍 SerpAPI Google Organic search: ${keyword}`);
+              const organicResults = await this.searchGoogleOrganic(keyword, params);
+              jobs.push(...organicResults);
+              
+              if (jobs.length >= (params.limit || 20)) break;
+            } catch (error) {
+              this.logger.warn(`SerpAPI Organic search failed for ${keyword}:`, error);
+              errors.push(`SerpAPI Organic search failed for ${keyword}: ${error}`);
+            }
           }
         }
       }
-
-      // Strategy 2: Use Google Organic Search via SerpAPI for job-related queries
-      if (jobs.length < 5 && this.serpApiKey) {
-        for (const keyword of params.keywords.slice(0, 1)) {
+      
+      // Strategy 2: Use Google Custom Search API if SerpAPI not available
+      else if (this.googleApiKey && jobs.length < 5) {
+        for (const keyword of params.keywords.slice(0, 2)) {
           try {
-            this.logger.info(`🔍 SerpAPI Google Organic search: ${keyword}`);
-            const organicResults = await this.searchGoogleOrganic(keyword, params);
-            jobs.push(...organicResults);
+            this.logger.info(`🔍 Google Custom Search: ${keyword}`);
+            const customSearchResults = await this.searchGoogleCustomSearch(keyword, params);
+            jobs.push(...customSearchResults);
             
             if (jobs.length >= (params.limit || 20)) break;
           } catch (error) {
-            this.logger.warn(`Google Organic search failed for ${keyword}:`, error);
-            errors.push(`Google Organic search failed for ${keyword}: ${error}`);
+            this.logger.warn(`Google Custom Search failed for ${keyword}:`, error);
+            errors.push(`Google Custom Search failed for ${keyword}: ${error}`);
           }
         }
       }
 
-      // Strategy 3: Fallback to generated jobs if SerpAPI is not available or returns insufficient results
+      // Strategy 3: Fallback to generated jobs if APIs are not available or return insufficient results
       if (jobs.length < 3) {
         this.logger.info('🔄 Using fallback job generation');
         const fallbackJobs = this.generateGoogleStyleJobs(params, Math.max(3, (params.limit || 10) - jobs.length));
@@ -127,7 +167,7 @@ export class GoogleScraper extends BaseScraper {
       this.logger.info(`✅ Google scraper completed`, {
         totalFound,
         duration: `${duration}ms`,
-        strategies: this.serpApiKey ? ['SerpAPI Jobs', 'SerpAPI Organic', 'Fallback'] : ['Fallback Only'],
+        mode: this.serpApiKey ? 'SerpAPI' : this.googleApiKey ? 'Google Custom Search' : 'Fallback Only',
         errors: errors.length
       });
 
@@ -621,8 +661,8 @@ export class GoogleScraper extends BaseScraper {
    * Validate scraper configuration
    */
   protected async performValidation(): Promise<void> {
-    if (!this.serpApiKey) {
-      this.logger.warn('⚠️  SERPAPI_KEY not configured. Google scraper will use fallback mode only.');
+    if (!this.serpApiKey && !this.googleApiKey) {
+      this.logger.warn('⚠️  Neither SERPAPI_KEY nor GOOGLE_API_KEY found in environment variables. Google scraper will use fallback mode only.');
       return;
     }
 
@@ -631,7 +671,7 @@ export class GoogleScraper extends BaseScraper {
       const testParams = {
         engine: 'google',
         q: 'test',
-        api_key: this.serpApiKey,
+        api_key: this.serpApiKey || this.googleApiKey,
         num: 1
       };
 
@@ -641,5 +681,188 @@ export class GoogleScraper extends BaseScraper {
       this.logger.error('❌ SerpAPI validation failed:', error);
       throw new Error(`SerpAPI validation failed: ${error}`);
     }
+  }
+
+  /**
+   * Search using Google Custom Search API
+   */
+  private async searchGoogleCustomSearch(keyword: string, params: SearchParams): Promise<Job[]> {
+    try {
+      let query = `${keyword} jobs`;
+      if (params.remote) {
+        query += ' remote';
+      }
+      if (params.location) {
+        query += ` ${params.location}`;
+      }
+
+      const url = 'https://www.googleapis.com/customsearch/v1';
+      const searchParams = {
+        key: this.googleApiKey,
+        cx: this.customSearchEngineId,
+        q: query,
+        num: Math.min(params.limit || 10, 10), // Google Custom Search limit
+        safe: 'medium'
+      };
+
+      this.logger.info(`🌐 Google Custom Search API request: ${query}`);
+      
+      const response = await axios.get<GoogleCustomSearchResponse>(url, { 
+        params: searchParams,
+        timeout: 10000
+      });
+
+      if (!response.data.items || response.data.items.length === 0) {
+        this.logger.warn('No results from Google Custom Search');
+        return [];
+      }
+
+      const jobs: Job[] = [];
+      for (const item of response.data.items) {
+        const job = this.createJobFromCustomSearchResult(item, keyword, params);
+        if (job) {
+          jobs.push(job);
+        }
+      }
+
+      this.logger.info(`📊 Google Custom Search found ${jobs.length} jobs for "${keyword}"`);
+      return jobs;
+
+    } catch (error) {
+      this.logger.error('Google Custom Search API error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create job from Google Custom Search result
+   */
+  private createJobFromCustomSearchResult(result: GoogleCustomSearchResult, keyword: string, params: SearchParams): Job | null {
+    try {
+      // Check if this looks like a job posting
+      if (!this.isJobRelatedCustomSearch(result)) {
+        return null;
+      }
+
+      const title = this.extractTitleFromCustomSearch(result, keyword);
+      const company = this.extractCompanyFromCustomSearch(result);
+      const location = this.extractLocationFromCustomSearch(result, params.location);
+      const description = result.snippet || '';
+      
+      // Extract contact information
+      const contact = this.extractContactFromDescription(description);
+      
+      // Extract salary if mentioned
+      const salary = this.extractSalaryFromText(description);
+      
+      // Extract requirements
+      const requirements = this.extractRequirements(description);
+
+      const job: Job = {
+        id: `google-custom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        title,
+        company,
+        location,
+        description,
+        requirements,
+        salary,
+        jobType: this.determineJobType(description) || 'full-time',
+        remote: this.isRemoteJob(description, location) || params.remote || false,
+        url: result.link,
+        source: 'google',
+        postedAt: new Date(),
+        scraped: {
+          scrapedAt: new Date(),
+          scraperId: this.id,
+          rawData: {
+            ...result,
+            source_type: 'google_custom_search'
+          }
+        },
+        contact
+      };
+
+      return job;
+    } catch (error) {
+      this.logger.warn('Error creating job from Custom Search result:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if Custom Search result is job-related
+   */
+  private isJobRelatedCustomSearch(result: GoogleCustomSearchResult): boolean {
+    const text = `${result.title} ${result.snippet}`.toLowerCase();
+    const jobKeywords = [
+      'job', 'jobs', 'career', 'careers', 'position', 'opening', 'opportunity',
+      'hiring', 'employment', 'work', 'apply', 'salary', 'benefits',
+      'full-time', 'part-time', 'remote', 'contract', 'freelance',
+      'developer', 'engineer', 'manager', 'analyst', 'specialist',
+      'coordinator', 'assistant', 'director', 'lead', 'senior'
+    ];
+    
+    return jobKeywords.some(keyword => text.includes(keyword));
+  }
+
+  /**
+   * Extract title from Custom Search result
+   */
+  private extractTitleFromCustomSearch(result: GoogleCustomSearchResult, keyword: string): string {
+    let title = result.title;
+    
+    // Clean up common patterns
+    title = title.replace(/\s*-\s*.*$/, ''); // Remove everything after first dash
+    title = title.replace(/\s*\|\s*.*$/, ''); // Remove everything after first pipe
+    title = title.replace(/\s*at\s+.*$/i, ''); // Remove "at Company"
+    
+    // If title doesn't contain the keyword, prepend it
+    if (!title.toLowerCase().includes(keyword.toLowerCase())) {
+      title = `${keyword} - ${title}`;
+    }
+    
+    return title.trim();
+  }
+
+  /**
+   * Extract company from Custom Search result
+   */
+  private extractCompanyFromCustomSearch(result: GoogleCustomSearchResult): string {
+    // Try to extract from display link (domain)
+    const domain = result.displayLink || result.link;
+    if (domain) {
+      const companyFromDomain = domain
+        .replace(/^www\./, '')
+        .replace(/\.(com|org|net|io|co).*$/, '')
+        .split('.')[0];
+      
+      // Capitalize first letter
+      return companyFromDomain.charAt(0).toUpperCase() + companyFromDomain.slice(1);
+    }
+    
+    return 'Company';
+  }
+
+  /**
+   * Extract location from Custom Search result
+   */
+  private extractLocationFromCustomSearch(result: GoogleCustomSearchResult, defaultLocation?: string): string {
+    const text = `${result.title} ${result.snippet}`;
+    
+    // Common location patterns
+    const locationPatterns = [
+      /(?:in|at|located in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:,\s*[A-Z]{2})?)/g,
+      /([A-Z][a-z]+,\s*[A-Z]{2})/g,
+      /(New York|Los Angeles|Chicago|Houston|Phoenix|Philadelphia|San Antonio|San Diego|Dallas|San Jose|Austin|Jacksonville|Fort Worth|Columbus|Charlotte|San Francisco|Indianapolis|Seattle|Denver|Washington|Boston|El Paso|Nashville|Detroit|Oklahoma City|Portland|Las Vegas|Memphis|Louisville|Baltimore|Milwaukee|Albuquerque|Tucson|Fresno|Sacramento|Mesa|Kansas City|Atlanta|Long Beach|Colorado Springs|Raleigh|Miami|Virginia Beach|Omaha|Oakland|Minneapolis|Tulsa|Arlington|Tampa|New Orleans)/gi
+    ];
+    
+    for (const pattern of locationPatterns) {
+      const matches = text.match(pattern);
+      if (matches && matches.length > 0) {
+        return matches[0].replace(/^(?:in|at|located in)\s+/i, '').trim();
+      }
+    }
+    
+    return defaultLocation || 'Remote';
   }
 } 
