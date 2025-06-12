@@ -897,4 +897,106 @@ router.post('/test/google',
   }
 );
 
+// Test RemoteOK scraper
+router.post('/test/remoteok',
+  [
+    body('keywords').isArray({ min: 1 }).withMessage('At least one keyword is required'),
+    body('keywords.*').isString().isLength({ min: 1 }).withMessage('Keywords cannot be empty'),
+    body('remote').optional().isBoolean(),
+    body('limit').optional().isInt({ min: 1, max: 50 })
+  ],
+  async (req: Request, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const {
+        keywords,
+        remote = true,
+        limit = 20
+      } = req.body;
+
+      console.log(`🚀 Starting RemoteOK scraper test:`, {
+        keywords,
+        remote,
+        limit,
+        approach: 'remoteok-api-integration'
+      });
+
+      // Import RemoteOK scraper
+      let RemoteOKScraper: any;
+      try {
+        const scraperModule = require('../../../../packages/scraper/dist/index.js');
+        RemoteOKScraper = scraperModule.RemoteOKScraper;
+      } catch (importError) {
+        console.error('Failed to import RemoteOK scraper:', importError);
+        return res.status(500).json({
+          success: false,
+          message: 'RemoteOK scraper not available - package build required',
+          error: 'Import failed'
+        });
+      }
+
+      const scraper = new RemoteOKScraper();
+      const startTime = Date.now();
+      
+      const searchParams = {
+        keywords,
+        remote,
+        limit
+      };
+
+      const result = await scraper.scrape(searchParams);
+      const duration = Date.now() - startTime;
+
+      console.log(`✅ RemoteOK scraper completed in ${duration}ms:`, {
+        jobsFound: result.jobs.length,
+        totalFound: result.totalFound,
+        errors: result.metadata.errors?.length || 0
+      });
+
+      // Add analysis
+      const realRemoteOKJobs = result.jobs.filter((job: any) => job.scraped?.rawData?.remoteOkData);
+      const generatedJobs = result.jobs.filter((job: any) => job.scraped?.rawData?.generated);
+      const jobsWithContacts = result.jobs.filter((job: any) => job.contact?.email);
+
+      res.json({
+        success: true,
+        data: {
+          jobs: result.jobs,
+          totalFound: result.totalFound,
+          hasMore: result.hasMore,
+          
+          analysis: {
+            realRemoteOKJobs: realRemoteOKJobs.length,
+            generatedJobs: generatedJobs.length,
+            jobsWithContacts: jobsWithContacts.length,
+            contactRate: result.jobs.length > 0 ? ((jobsWithContacts.length / result.jobs.length) * 100).toFixed(1) + '%' : '0%',
+            allRemote: result.jobs.every((job: any) => job.remote),
+            averageSalary: result.jobs.filter((job: any) => job.salary).length > 0 ? 'Available' : 'Not specified'
+          }
+        },
+        metadata: {
+          ...result.metadata,
+          duration: `${duration}ms`,
+          platform: 'remoteok',
+          scraperVersion: '1.0.0',
+          searchApproach: 'remoteok-api-with-fallback',
+          timestamp: new Date().toISOString()
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ RemoteOK scraper failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'RemoteOK scraper failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+);
+
 export default router; 

@@ -178,7 +178,9 @@ export default function JobDiscoveryPage() {
       
       if (source === 'google') {
         endpoint = 'http://localhost:3001/api/scraper/test/google';
-      } else if (source === 'twitter') {
+      } else if (source === 'remoteok') {
+        endpoint = 'http://localhost:3001/api/scraper/test/remoteok';
+      } else if (source === 'remoteok') { endpoint = 'http://localhost:3001/api/scraper/test/remoteok'; } else if (source === 'twitter') {
         endpoint = 'http://localhost:3001/api/scraper/test-twitter';
       } else if (source === 'linkedin') {
         endpoint = 'http://localhost:3001/api/scraper/test-linkedin';
@@ -515,6 +517,7 @@ export default function JobDiscoveryPage() {
               >
                 <option value="reddit">🔴 Reddit (Best Results)</option>
                 <option value="google">🌐 Google (Comprehensive)</option>
+                <option value="remoteok">🏠 RemoteOK (Remote Jobs)</option>
                 <option value="twitter">🐦 Twitter</option>
                 <option value="linkedin">💼 LinkedIn</option>
               </select>
