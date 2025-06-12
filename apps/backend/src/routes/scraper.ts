@@ -645,4 +645,256 @@ function isHiringPost(job: any): boolean {
   return hasHiringKeywords || hasFormattedRequirements || hasSalaryOffer;
 }
 
+// Test Google scraper with comprehensive web search
+router.post('/test/google',
+  [
+    body('keywords').isArray({ min: 1 }).withMessage('At least one keyword is required'),
+    body('keywords.*').isString().isLength({ min: 1 }).withMessage('Keywords cannot be empty'),
+    body('location').optional().isString(),
+    body('remote').optional().isBoolean(),
+    body('searchMode').optional().isIn(['strict', 'moderate', 'loose']).withMessage('Search mode must be strict, moderate, or loose'),
+    body('limit').optional().isInt({ min: 1, max: 100 }),
+    body('sessionId').optional().isString()
+  ],
+  async (req: Request, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const {
+        keywords,
+        location,
+        remote = false,
+        searchMode = 'moderate',
+        limit = 50,
+        sessionId
+      } = req.body;
+
+      console.log(`🚀 Starting Google comprehensive web search test:`, {
+        keywords,
+        location,
+        remote,
+        searchMode,
+        limit,
+        approach: 'multi-strategy-entire-web'
+      });
+
+      // Send initial progress update
+      if (sessionId) {
+        sendProgressUpdate(sessionId, {
+          type: 'start',
+          stage: 'init',
+          message: `🌐 Initializing comprehensive Google web search (${searchMode} mode)...`,
+          progress: 5,
+          details: `Preparing to search entire web for ${keywords.join(', ')} opportunities using multiple strategies`
+        });
+      }
+
+      // Import Google scraper
+      let GoogleScraper: any;
+      try {
+        const scraperModule = require('../../../../packages/scraper/dist/index.js');
+        GoogleScraper = scraperModule.GoogleScraper;
+      } catch (importError) {
+        console.error('Failed to import Google scraper:', importError);
+        return res.status(500).json({
+          success: false,
+          message: 'Google scraper not available - package build required',
+          error: 'Import failed'
+        });
+      }
+
+      // Send progress updates during scraping
+      if (sessionId) {
+        sendProgressUpdate(sessionId, {
+          type: 'progress',
+          stage: 'scraper_init',
+          message: '🔧 Initializing comprehensive Google scraper...',
+          progress: 15,
+          details: 'Loading multi-strategy scraper with browser automation and web crawling'
+        });
+      }
+
+      const scraper = new GoogleScraper();
+      const startTime = Date.now();
+      
+      if (sessionId) {
+        sendProgressUpdate(sessionId, {
+          type: 'progress',
+          stage: 'scraper_ready',
+          message: '🌐 Google scraper ready, starting comprehensive web search...',
+          progress: 25,
+          details: 'Scraper initialized with 5 search strategies: direct search, site-specific, content-type, browser automation, and deep content extraction'
+        });
+      }
+      
+      const searchParams = {
+        keywords,
+        location,
+        remote,
+        limit,
+        searchMode
+      };
+
+      // Start the actual scraping
+      if (sessionId) {
+        sendProgressUpdate(sessionId, {
+          type: 'progress',
+          stage: 'searching',
+          message: `🔍 Searching entire web with ${searchMode} mode...`,
+          progress: 40,
+          details: `Scanning job boards, company sites, blogs, forums, and social platforms for ${keywords.join(', ')} opportunities`
+        });
+      }
+
+      const result = await scraper.scrape(searchParams);
+      const duration = Date.now() - startTime;
+
+      // Send progress update for analysis
+      if (sessionId) {
+        sendProgressUpdate(sessionId, {
+          type: 'progress',
+          stage: 'analyzing',
+          message: '🎯 Analyzing and ranking results...',
+          progress: 70,
+          details: `Processing ${result.jobs.length} opportunities, extracting contact info and calculating relevance scores`
+        });
+      }
+
+      // Apply additional filtering and analysis
+      let filteredJobs = result.jobs;
+
+      // Sort by relevance score (highest first)
+      filteredJobs.sort((a: any, b: any) => {
+        const scoreA = a.scraped?.rawData?.relevanceScore || 0;
+        const scoreB = b.scraped?.rawData?.relevanceScore || 0;
+        return scoreB - scoreA;
+      });
+
+      // Send progress update after analysis
+      if (sessionId) {
+        sendProgressUpdate(sessionId, {
+          type: 'progress',
+          stage: 'processing',
+          message: '📊 Finalizing comprehensive results...',
+          progress: 85,
+          details: `Ranked ${filteredJobs.length} opportunities by relevance, extracting contact information and metadata`
+        });
+      }
+
+      console.log(`✅ Google comprehensive search completed in ${duration}ms:`, {
+        jobsFound: result.jobs.length,
+        totalFound: result.totalFound,
+        hasMore: result.hasMore,
+        errors: result.metadata.errors?.length || 0,
+        strategies: 'direct, site-specific, content-type, browser, deep-content'
+      });
+
+      // Send final completion update
+      if (sessionId) {
+        sendProgressUpdate(sessionId, {
+          type: 'complete',
+          stage: 'complete',
+          message: '🎉 Comprehensive web search completed!',
+          progress: 100,
+          details: `Found ${filteredJobs.length} opportunities across the entire web in ${duration}ms`,
+          data: {
+            jobsFound: filteredJobs.length,
+            contactsFound: filteredJobs.filter((job: any) => job.contact?.email).length,
+            duration: `${duration}ms`,
+            strategies: ['direct-search', 'site-specific', 'content-type', 'browser-automation', 'deep-content'],
+            coverage: 'entire-web'
+          }
+        });
+      }
+
+      // Add comprehensive analysis
+      const jobsWithContacts = filteredJobs.filter((job: any) => job.contact?.email);
+      const remoteJobs = filteredJobs.filter((job: any) => job.remote);
+      const highRelevanceJobs = filteredJobs.filter((job: any) => (job.scraped?.rawData?.relevanceScore || 0) > 0.7);
+      
+      // Analyze source domains
+      const domainBreakdown = filteredJobs.reduce((acc: any, job: any) => {
+        const domain = job.scraped?.rawData?.searchResult?.displayLink || 'unknown';
+        acc[domain] = (acc[domain] || 0) + 1;
+        return acc;
+      }, {});
+
+      // Analyze job types found
+      const jobTypeBreakdown = filteredJobs.reduce((acc: any, job: any) => {
+        const jobType = job.jobType || 'unspecified';
+        acc[jobType] = (acc[jobType] || 0) + 1;
+        return acc;
+      }, {});
+
+      res.json({
+        success: true,
+        data: {
+          jobs: filteredJobs.map((job: any) => ({
+            ...job,
+            // Add Google-specific metadata for display
+            googleMetadata: {
+              searchKeyword: job.scraped?.rawData?.searchKeyword,
+              relevanceScore: job.scraped?.rawData?.relevanceScore,
+              searchResult: {
+                title: job.scraped?.rawData?.searchResult?.title,
+                snippet: job.scraped?.rawData?.searchResult?.snippet,
+                displayLink: job.scraped?.rawData?.searchResult?.displayLink
+              },
+              extractedInfo: job.scraped?.rawData?.extractedInfo
+            }
+          })),
+          
+          totalFound: result.totalFound,
+          hasMore: result.hasMore,
+          
+          analysis: {
+            jobsWithContacts: jobsWithContacts.length,
+            contactRate: filteredJobs.length > 0 ? ((jobsWithContacts.length / filteredJobs.length) * 100).toFixed(1) + '%' : '0%',
+            remoteJobs: remoteJobs.length,
+            remoteRate: filteredJobs.length > 0 ? ((remoteJobs.length / filteredJobs.length) * 100).toFixed(1) + '%' : '0%',
+            highRelevanceJobs: highRelevanceJobs.length,
+            highRelevanceRate: filteredJobs.length > 0 ? ((highRelevanceJobs.length / filteredJobs.length) * 100).toFixed(1) + '%' : '0%',
+            averageRelevance: filteredJobs.length > 0 ? 
+              (filteredJobs.reduce((sum: number, job: any) => sum + (job.scraped?.rawData?.relevanceScore || 0), 0) / filteredJobs.length).toFixed(3) : '0',
+            domainBreakdown,
+            jobTypeBreakdown,
+            topDomains: Object.entries(domainBreakdown)
+              .sort(([,a], [,b]) => (b as number) - (a as number))
+              .slice(0, 10)
+              .map(([domain, count]) => ({ domain, count })),
+            searchStrategies: {
+              direct: 'Google/DuckDuckGo direct search with multiple query patterns',
+              siteSpecific: 'Targeted searches on job boards and company career pages',
+              contentType: 'Document and content-specific searches (PDFs, blogs, articles)',
+              browserAutomation: 'Real-time browser-based search with JavaScript rendering',
+              deepContent: 'Blog posts, articles, and community content extraction'
+            }
+          }
+        },
+        metadata: {
+          ...result.metadata,
+          duration: `${duration}ms`,
+          platform: 'google',
+          scraperVersion: '1.0.0',
+          searchApproach: 'comprehensive-web-search',
+          strategiesUsed: ['direct', 'site-specific', 'content-type', 'browser', 'deep-content'],
+          coverage: 'entire-web',
+          timestamp: new Date().toISOString()
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Google comprehensive search failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Google comprehensive search failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+);
+
 export default router; 

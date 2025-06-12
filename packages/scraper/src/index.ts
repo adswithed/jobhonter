@@ -20,6 +20,7 @@ export { createLogger } from './utils/Logger';
 // Platform-specific scrapers
 export { TwitterScraper } from './scrapers/TwitterScraper';
 export { GoogleJobsScraper } from './scrapers/GoogleJobsScraper';
+export { GoogleScraper } from './scrapers/GoogleScraper';
 export { RemoteOKScraper } from './scrapers/RemoteOKScraper';
 export { RedditScraper } from './scrapers/RedditScraper';
 

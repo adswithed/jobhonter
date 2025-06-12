@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import { format, subDays } from 'date-fns';
-import puppeteer, { Browser, Page } from 'puppeteer';
+import { chromium, Browser, Page } from 'playwright';
 import {
   SearchParams,
   ScraperResult,
@@ -47,7 +47,7 @@ export class TwitterScraper extends BaseScraper {
 
       // Initialize Puppeteer browser
       if (!this.browser) {
-        this.browser = await puppeteer.launch({
+        this.browser = await chromium.launch({
           headless: true,
           args: [
             '--no-sandbox',
@@ -158,15 +158,15 @@ export class TwitterScraper extends BaseScraper {
       page = await this.browser.newPage();
       
       // Set user agent and viewport
-      await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-      await page.setViewport({ width: 1366, height: 768 });
+      await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' });
+      await page.setViewportSize({ width: 1366, height: 768 });
 
       // Navigate to Twitter search
       const searchUrl = `https://twitter.com/search?q=${encodeURIComponent(query)}&src=typed_query&f=live`;
       console.log(`🌐 Navigating to: ${searchUrl}`);
       
       await page.goto(searchUrl, { 
-        waitUntil: 'networkidle2',
+        waitUntil: 'networkidle',
         timeout: 30000 
       });
 

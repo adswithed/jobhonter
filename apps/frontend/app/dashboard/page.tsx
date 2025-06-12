@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "@/hooks/use-toast"
+import { GoogleSearchComponent } from "@/components/google-search"
 
 interface JobStats {
   jobs: {
@@ -224,8 +225,9 @@ export default function DashboardPage() {
       </Alert>
       
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid grid-cols-4 w-full max-w-md">
+        <TabsList className="grid grid-cols-5 w-full max-w-2xl">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="google-search">Google Search</TabsTrigger>
           <TabsTrigger value="automation">Automation</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
@@ -455,6 +457,10 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="google-search" className="space-y-6">
+          <GoogleSearchComponent />
         </TabsContent>
 
         <TabsContent value="automation" className="space-y-6">

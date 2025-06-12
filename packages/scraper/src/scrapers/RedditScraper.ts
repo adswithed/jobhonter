@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import { format, subDays } from 'date-fns';
-import puppeteer, { Browser, Page } from 'puppeteer';
+import { chromium, Browser, Page } from 'playwright';
 import {
   SearchParams,
   ScraperResult,
@@ -110,7 +110,13 @@ export class RedditScraper extends BaseScraper {
   ];
 
   constructor() {
-    super('reddit');
+    super(
+      'reddit-scraper',
+      'Reddit Job Scraper',
+      'reddit',
+      PlatformConfigs.reddit
+    );
+    
     this.httpClient = axios.create({
       timeout: 30000,
       headers: {
@@ -194,7 +200,7 @@ export class RedditScraper extends BaseScraper {
         metadata: {
           searchParams: params,
           scrapedAt: new Date(),
-          scraperId: this.getId(),
+          scraperId: this.id,
           platform: 'reddit',
           took: Date.now(),
           errors

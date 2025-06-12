@@ -174,16 +174,26 @@ export default function JobDiscoveryPage() {
     connectToProgressFeed(sessionId)
 
     try {
-      const endpoint = source === 'reddit' ? 'http://localhost:3001/api/scraper/test-reddit' : 'http://localhost:3001/api/scraper/test-discover'
+      let endpoint = 'http://localhost:3001/api/scraper/test-reddit'; // Default to Reddit
+      
+      if (source === 'google') {
+        endpoint = 'http://localhost:3001/api/scraper/test/google';
+      } else if (source === 'twitter') {
+        endpoint = 'http://localhost:3001/api/scraper/test-twitter';
+      } else if (source === 'linkedin') {
+        endpoint = 'http://localhost:3001/api/scraper/test-linkedin';
+      }
       
       console.log('🔍 Starting job search with:', {
         endpoint,
+        source,
         keywords: [jobTitle.trim()],
         location: location.trim() || undefined,
         remote: remoteOnly,
         limit: 20,
+        searchMode,
         sessionId // Include session ID for backend progress tracking
-      })
+      });
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -504,6 +514,7 @@ export default function JobDiscoveryPage() {
                 disabled={loading}
               >
                 <option value="reddit">🔴 Reddit (Best Results)</option>
+                <option value="google">🌐 Google (Comprehensive)</option>
                 <option value="twitter">🐦 Twitter</option>
                 <option value="linkedin">💼 LinkedIn</option>
               </select>
